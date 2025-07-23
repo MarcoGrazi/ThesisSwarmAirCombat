@@ -1420,7 +1420,7 @@ class AerialBattle(MultiAgentEnv):
 
         center_dist = aircraft.get_distance_from_centroid(self.bases)
         abs_loiter = abs(2000-center_dist) / self.env_size[0]
-        reward_Flight['Loiter'] = -abs_loiter * Versions[self.reward_version]['L']
+        reward_Flight['Loiter'] = 0.05-abs_loiter * Versions[self.reward_version]['L']
 
         a_S = 30
         mid_S = 0.2
