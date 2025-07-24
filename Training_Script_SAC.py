@@ -119,7 +119,8 @@ class CustomWandbCallback(DefaultCallbacks):
         metrics["reward_max"] = env_metrics.get("episode_reward_max")
         metrics["reward_min"] = env_metrics.get("episode_reward_min")
         metrics["episode_len_mean"] = env_metrics.get("episode_len_mean")
-        metrics["lane_time_metric"] = result["custom_metrics"].get("lane_time", 0)
+        metrics["lane_time_mean"] = result["custom_metrics"].get("lane_time_mean", 0)
+        metrics["lane_time_max"] = result["custom_metrics"].get("lane_time_max", 0)
 
         learner_stats = result.get("info", {}).get("learner", {}).get("team_0", {}).get("learner_stats", {})
         for key in ["entropy", "kl", "cur_lr", "total_loss", "policy_loss", "vf_loss"]:
@@ -156,12 +157,12 @@ class CallbacksBroker(DefaultCallbacks):
         self.Artifacts.on_train_result(algorithm=algorithm, result=result, **kwargs)
         self.WandbCallBack.on_train_result(algorithm=algorithm, result=result, **kwargs)
     
-
-    def on_episode_end(self, *, worker, episode, **kwargs):
-        common_info = episode._last_infos  # Works even if only one agent gives it
-        lane_metric = common_info["__common__"].get("lane_time", None)
+    def on_episode_step(self, *, episode, **kwargs):
+        common_info = episode._last_infos.get("__common__", {})
+        lane_metric = common_info.get("lane_time", None)
         if lane_metric is not None:
-            episode.custom_metrics["lane_time"] = lane_metric
+            episode.custom_metrics["lane_time"] = (lane_metric)
+    
 
 
 #Create RunName directory inside Folder, with RunDescription inside it

@@ -1662,7 +1662,6 @@ class AerialBattle(MultiAgentEnv):
 
         # === Optional: Add team-based rewards here ===
         # (e.g., base destruction, shared victories, assists, etc.)
-
         return self.get_obs(), rewards, terminated, truncated, {'__common__': {'lane_time':self.steps_in_lane}}
 
 
