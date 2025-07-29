@@ -20,7 +20,7 @@
       'missile_speed':600,
       'missile_max_acceleration': 10,
       'stepwise_tone_increment':0.01,
-      'min_bases_distance': 8000,
+      'min_bases_distance': 10000,
       'env_size':[15000, 15000, 10000],
       'max_size': 20000,
       'attack_vulnerability_cone': [60, 300, 5000],

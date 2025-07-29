@@ -21,7 +21,7 @@ from ray.tune.registry import register_env
 # === Configuration Paths ===
 Folder = 'Training_Runs'
 RunName = 'Train_1_GOODFLIGHT_2'
-RunDescription = 'Explore different entropy schedules for fixed gamma=0.999,\n' \
+RunDescription = 'Explore different entropy parameters for fixed gamma=0.999,\n' \
                 'train_batch_size=500. explore slight variations on best reward version from previous step.\n' \
                 'Added a control effort component to discourage excessive manouvres if not necessary'
 
@@ -34,7 +34,6 @@ storage_path = os.path.join("/home/lsp/Desktop/ThesisCode", Folder)
 
 # Set your WandB API key for logging
 os.environ["WANDB_API_KEY"] = "1b8b77cc6fc3631890702b9ecbfed2fdc1551347"
-
 
 
 # === Custom Callbacks ===
@@ -88,7 +87,6 @@ class SaveArtifactsOnCheckpoint(DefaultCallbacks):
             print(f"Finished Checkpoint at {checkpoint_dir}")
 
 
-
 # Log metrics to Weights & Biases (WandB)
 class CustomWandbCallback(DefaultCallbacks):
     def __init__(self):
@@ -117,11 +115,11 @@ class CustomWandbCallback(DefaultCallbacks):
         metrics["reward_max"] = env_metrics.get("episode_reward_max")
         metrics["reward_min"] = env_metrics.get("episode_reward_min")
         metrics["episode_len_mean"] = env_metrics.get("episode_len_mean")
-        metrics["lane_time_mean"] = env_metrics["custom_metrics"].get("lane_time_mean", 0)
-        metrics["lane_time_max"] = env_metrics["custom_metrics"].get("lane_time_max", 0)
+        metrics["cont_lane_time_mean"] = env_metrics["custom_metrics"].get("cont_lane_time_mean", 0)
+        metrics["cont_lane_time_max"] = env_metrics["custom_metrics"].get("cont_lane_time_max", 0)
 
         learner_stats = result.get("info", {}).get("learner", {}).get("team_0", {}).get("learner_stats", {})
-        for key in ["entropy", "kl", "cur_lr", "total_loss", "policy_loss", "vf_loss"]:
+        for key in ["alpha_value", "actor_loss", "critic_loss", "target_entropy"]:
             if key in learner_stats:
                 metrics[key] = learner_stats[key]
 
@@ -159,7 +157,7 @@ class CallbacksBroker(DefaultCallbacks):
         common_info = episode._last_infos.get("__common__", {})
         lane_metric = common_info.get("lane_time", None)
         if lane_metric is not None:
-            episode.custom_metrics["lane_time"] = (lane_metric)
+            episode.custom_metrics["cont_lane_time"] = (lane_metric)
     
 
 
@@ -216,14 +214,17 @@ def policy_mapping_fn(agent_id, episode=0, **kwargs):
 algo_config = (
     SACConfig()
     .api_stack(enable_rl_module_and_learner=False, enable_env_runner_and_connector_v2=False)
-    .environment(env="aerial_battle", env_config={'reward_version': tune.grid_search([1])})
+    .environment(env="aerial_battle", env_config={'reward_version': tune.grid_search([1,2,3,4,5,6])})
     .training(
         train_batch_size=tune.grid_search(alg_config['batch_size_per_learner']),
-        lr=alg_config['lr'],
         gamma=tune.grid_search(alg_config['gamma']),
-        entropy_coeff_schedule=tune.grid_search([[[0, 0.1], [1e6, 0.01]], 
-                                                 [[0, 0.05], [1e6, 0.005]]], 
-                                                 [[0, 0.2], [1e6, 0.02]]),
+
+        twin_q=True,
+        #initial_alpha=2,
+        #n_step=3,
+        actor_lr=alg_config['lr'],
+        critic_lr=1e-4,
+        alpha_lr=1e-4,
         grad_clip=50,
         replay_buffer_config={
             'type': 'MultiAgentPrioritizedReplayBuffer',

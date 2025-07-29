@@ -183,7 +183,7 @@ class Aircraft:
         """
 
         # === 1. Convert normalized input angles to radians ===
-        max_angle_rad = np.deg2rad(45)  # maximum angular offset allowed by agent
+        max_angle_rad = np.deg2rad(30)  # maximum angular offset allowed by agent
         v_up   = action[0] * max_angle_rad    # vertical offset from forward
         v_side = action[1] * max_angle_rad    # lateral offset from forward
         v_speed = action[2]                  # speed stays normalized for now
@@ -1353,10 +1353,9 @@ class AerialBattle(MultiAgentEnv):
         Versions = {
             1: {
                 'CE': 0.1,
-                'AL': 0.2,
+                'AL': 0.3,
                 'L': 0.2,
                 'CS': 0.4,
-                'SF': 0.1,
 
                 'P': 0.0,
                 'CR': 0.0,
@@ -1369,8 +1368,7 @@ class AerialBattle(MultiAgentEnv):
                 'CE': 0.1,
                 'AL': 0.2,
                 'L': 0.3,
-                'CS': 0.3,
-                'SF': 0.1,
+                'CS': 0.4,
 
                 'P': 0.0,
                 'CR': 0.0,
@@ -1380,11 +1378,10 @@ class AerialBattle(MultiAgentEnv):
                 'PW': 0.0
             },
             3: {
-                'CE': 0.1,
-                'AL': 0.3,
+                'CE': 0.2,
+                'AL': 0.2,
                 'L': 0.2,
-                'CS': 0.3,
-                'SF': 0.1,
+                'CS': 0.4,
 
                 'P': 0.0,
                 'CR': 0.0,
@@ -1394,11 +1391,10 @@ class AerialBattle(MultiAgentEnv):
                 'PW': 0.0
             },
             4: {
-                'CE': 0.05,
-                'AL': 0.2,
-                'L': 0.3,
-                'CS': 0.4,
-                'SF': 0.05,
+                'CE': 0.2,
+                'AL': 0.3,
+                'L': 0.2,
+                'CS': 0.3,
 
                 'P': 0.0,
                 'CR': 0.0,
@@ -1408,11 +1404,23 @@ class AerialBattle(MultiAgentEnv):
                 'PW': 0.0
             },
             5: {
-                'CE': 0.05,
+                'CE': 0.2,
+                'AL': 0.2,
+                'L': 0.3,
+                'CS': 0.3,
+
+                'P': 0.0,
+                'CR': 0.0,
+                'G' : 0.0,
+
+                'GFW': 1.0,
+                'PW': 0.0
+            },
+            6: {
+                'CE': 0.1,
                 'AL': 0.3,
-                'L': 0.2,
-                'CS': 0.4,
-                'SF': 0.05,
+                'L': 0.3,
+                'CS': 0.3,
 
                 'P': 0.0,
                 'CR': 0.0,
@@ -1424,52 +1432,40 @@ class AerialBattle(MultiAgentEnv):
         }
 
         #### Flight Related Rewards ####
+        a_CE = 20
+        mid_CE = 0.6
+        abs_effort = (abs(action[0]) + abs(action[1])) / 2
+        reward_Flight['Control Effort'] = -((1/(1 + np.exp(-a_CE * (abs_effort - mid_CE)))) * 
+                                           Versions[self.reward_version]['CE'])
 
-        #we want to push the model into making delta actions small enough that the PID can follow them:
-        # PID takes at worst 250 physics steps to reach target from -1 to 1. => 250/120 = 2 seconds = 20 action_steps
-        # thus we want a step of max 2/20 = 0.1
-        d_1, d_2, d_3, _= abs(actions[-1] - actions[-2])
-        d_surfaces = ((d_1+d_2+d_3)/3)
-        a_CE = 30
-        mid_CE = 0.3
-        reward_Flight['Control_erratic'] = -((1/(1 + np.exp(-a_CE * (d_surfaces - mid_CE)))) *
-                                              Versions[self.reward_version]['CE'])
-
-        a_A = 30
-        mid_A = 0.2
-        abs_alt = abs(self.env_size[2]/2 - altitude) / self.env_size[2]
+        a_A = 15
+        mid_A = 0.25
+        abs_alt = abs(self.env_size[2]/2 - altitude) / (self.env_size[2]/2)
         reward_Flight['Altitude'] = -((1/(1 + np.exp(-a_A * (abs_alt - mid_A)))) * 
                                       Versions[self.reward_version]['AL'])
-
-        center_dist = aircraft.get_distance_from_centroid(self.bases)
-        abs_loiter = np.clip(abs(5000-center_dist) / 5000, 0, 1)
-        reward_Flight['Loiter'] = -abs_loiter * Versions[self.reward_version]['L']
-
-        a_S = 30
-        mid_S = 0.2
-        abs_speed = abs(200-vel[0]) / 343
+        
+        a_S = 15
+        mid_S = 0.25
+        abs_speed = abs(200-vel[0]) / 143
         reward_Flight['Cruise Speed'] = -((1/(1 + np.exp(-a_S * (abs_speed - mid_S)))) * 
                                           Versions[self.reward_version]['CS'])
         
+
+        center_dist = aircraft.get_distance_from_centroid(self.bases)
+        a_L = 8
+        mid_L = 0.3
+        abs_loiter = np.clip(abs(3000-center_dist) / 8000, 0, 1)
+        reward_Flight['Loiter'] = -((1/(1 + np.exp(-a_L * (abs_loiter - mid_L)))) * 
+                                          Versions[self.reward_version]['L'])
+
         # sparse reward for each step spent inside loitering lane. Custom metric definition
-        if abs(self.env_size[2]/2 - altitude) < 800 and abs(5000-center_dist)< 800:
+        if abs(self.env_size[2]/2 - altitude) < 1000 and abs(3000-center_dist) < 500:
             self.steps_in_lane = self.steps_in_lane + 1
-            reward_Flight['Loiter'] += 0.5
+            reward_Flight['Loiter'] = 5
         else:
             self.steps_in_lane = 0
 
-        a_SF = 30
-        mid_SF = 0.2
-        roll, pitch, _ = telemetry['orientation'][-1]  # radians
-        abs_attitude = max(abs(pitch)-np.pi/12, 0) / np.pi
-        reward_Flight['Stable Flight'] = -((1/(1 + np.exp(-a_SF * (abs_attitude - mid_SF)))) * 
-                                           Versions[self.reward_version]['SF'])
-
-        Total_Reward['Stall Speed'] = -((vel[0]<100) * 5)
-
-        # Sparse reward to discourage too aggressive manouvres 
-        if abs(action[0]) > 0.5 or abs(action[1]) > 0.5:
-            Total_Reward['Control Effort'] = -(max(abs(action[0])-0.5, 0) * max(abs(action[1])-0.5, 0)) * 0.1
+        Total_Reward['Stall Speed'] = -((vel[0]<100) * 10)
         
         normalized_reward_Flight = sum(reward_Flight.values())
 
@@ -1550,7 +1546,7 @@ class AerialBattle(MultiAgentEnv):
             or aircraft.get_distance_from_centroid(self.bases) > self.max_size):
             self.Aircrafts[agent_index].kill()
             terminated = True
-            normalized_total_reward = -100
+            normalized_total_reward = -500
 
 
         self.episode_rewards[self.possible_agents[agent_index]].append(Total_Reward.copy())
