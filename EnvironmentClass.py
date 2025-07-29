@@ -183,7 +183,7 @@ class Aircraft:
         """
 
         # === 1. Convert normalized input angles to radians ===
-        max_angle_rad = np.deg2rad(30)  # maximum angular offset allowed by agent
+        max_angle_rad = np.deg2rad(45)  # maximum angular offset allowed by agent
         v_up   = action[0] * max_angle_rad    # vertical offset from forward
         v_side = action[1] * max_angle_rad    # lateral offset from forward
         v_speed = action[2]                  # speed stays normalized for now
@@ -633,6 +633,7 @@ class AerialBattle(MultiAgentEnv):
 
         # Compute orientation to target base (Euler angles or equivalent)
         rand_orient = self.orientation_to_target(rand_pos, self.bases[target_base])
+        rand_orient[1] = 0
 
         # === Add randomness to orientation if in training mode ===
         if not testing:
@@ -1354,8 +1355,8 @@ class AerialBattle(MultiAgentEnv):
             1: {
                 'CE': 0.1,
                 'AL': 0.3,
-                'L': 0.2,
-                'CS': 0.4,
+                'L': 0.4,
+                'CS': 0.2,
 
                 'P': 0.0,
                 'CR': 0.0,
@@ -1366,9 +1367,9 @@ class AerialBattle(MultiAgentEnv):
             },
             2: {
                 'CE': 0.1,
-                'AL': 0.2,
+                'AL': 0.3,
                 'L': 0.3,
-                'CS': 0.4,
+                'CS': 0.3,
 
                 'P': 0.0,
                 'CR': 0.0,
@@ -1378,10 +1379,10 @@ class AerialBattle(MultiAgentEnv):
                 'PW': 0.0
             },
             3: {
-                'CE': 0.2,
+                'CE': 0.1,
                 'AL': 0.2,
-                'L': 0.2,
-                'CS': 0.4,
+                'L': 0.4,
+                'CS': 0.3,
 
                 'P': 0.0,
                 'CR': 0.0,
@@ -1391,9 +1392,9 @@ class AerialBattle(MultiAgentEnv):
                 'PW': 0.0
             },
             4: {
-                'CE': 0.2,
-                'AL': 0.3,
-                'L': 0.2,
+                'CE': 0.1,
+                'AL': 0.4,
+                'L': 0.3,
                 'CS': 0.3,
 
                 'P': 0.0,
@@ -1405,9 +1406,9 @@ class AerialBattle(MultiAgentEnv):
             },
             5: {
                 'CE': 0.2,
-                'AL': 0.2,
+                'AL': 0.4,
                 'L': 0.3,
-                'CS': 0.3,
+                'CS': 0.1,
 
                 'P': 0.0,
                 'CR': 0.0,
@@ -1418,9 +1419,35 @@ class AerialBattle(MultiAgentEnv):
             },
             6: {
                 'CE': 0.1,
-                'AL': 0.3,
+                'AL': 0.4,
+                'L': 0.4,
+                'CS': 0.1,
+
+                'P': 0.0,
+                'CR': 0.0,
+                'G' : 0.0,
+
+                'GFW': 1.0,
+                'PW': 0.0
+            },
+            7: {
+                'CE': 0.1,
+                'AL': 0.2,
+                'L': 0.5,
+                'CS': 0.2,
+
+                'P': 0.0,
+                'CR': 0.0,
+                'G' : 0.0,
+
+                'GFW': 1.0,
+                'PW': 0.0
+            },
+            8: {
+                'CE': 0.1,
+                'AL': 0.2,
                 'L': 0.3,
-                'CS': 0.3,
+                'CS': 0.4,
 
                 'P': 0.0,
                 'CR': 0.0,
@@ -1459,9 +1486,9 @@ class AerialBattle(MultiAgentEnv):
                                           Versions[self.reward_version]['L'])
 
         # sparse reward for each step spent inside loitering lane. Custom metric definition
-        if abs(self.env_size[2]/2 - altitude) < 1000 and abs(3000-center_dist) < 500:
+        if abs(self.env_size[2]/2 - altitude) < 800 and abs(3000-center_dist) < 500:
             self.steps_in_lane = self.steps_in_lane + 1
-            reward_Flight['Loiter'] = 5
+            reward_Flight['Loiter'] = 10
         else:
             self.steps_in_lane = 0
 

@@ -1,7 +1,7 @@
 { 'alg_config':
   {
     'batch_size_per_learner': [500],
-    'lr': [[0, 0.001], [1000000, 0.0005], [2500000, 0.0001]],
+    'lr': [[0, 0.0005], [1000000, 0.0001], [2500000, 0.00005]],
     'gamma': [0.999],
     'train_iterations': 10000,
     'checkpoint_freq': 2000,
@@ -34,8 +34,8 @@
       'UpAngle_step': 0.01,
       'SideAngle_step': 0.01,
       'screen_size' : [800, 800],
-      'spawning_distance': 3000,
-      'spawning_orientations': [[0], [0, 90, -90]] 
+      'spawning_distance': 1500,
+      'spawning_orientations': [[0], [0]] 
     },
 
   'uav_config' :

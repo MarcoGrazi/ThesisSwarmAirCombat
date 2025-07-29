@@ -48,7 +48,7 @@ class SaveArtifactsOnCheckpoint(DefaultCallbacks):
 
             env = algorithm.env_creator({'reward_version': 1})  # Must be num_env_runners = 1
 
-            for i in range(5):  # Save 5 rollouts
+            for i in range(2):  # Save 5 rollouts
                 checkpoint_dir_i = os.path.join(checkpoint_dir, f"{i}")
                 os.makedirs(checkpoint_dir_i, exist_ok=True)
 
@@ -214,7 +214,7 @@ def policy_mapping_fn(agent_id, episode=0, **kwargs):
 algo_config = (
     SACConfig()
     .api_stack(enable_rl_module_and_learner=False, enable_env_runner_and_connector_v2=False)
-    .environment(env="aerial_battle", env_config={'reward_version': tune.grid_search([1,2,3,4,5,6])})
+    .environment(env="aerial_battle", env_config={'reward_version': tune.grid_search([1,2,3,4,5,6,7,8])})
     .training(
         train_batch_size=tune.grid_search(alg_config['batch_size_per_learner']),
         gamma=tune.grid_search(alg_config['gamma']),
@@ -223,8 +223,8 @@ algo_config = (
         #initial_alpha=2,
         #n_step=3,
         actor_lr=alg_config['lr'],
-        critic_lr=1e-4,
-        alpha_lr=1e-4,
+        critic_lr = 0.0001,
+        alpha_lr = 0.0001,
         grad_clip=50,
         replay_buffer_config={
             'type': 'MultiAgentPrioritizedReplayBuffer',
