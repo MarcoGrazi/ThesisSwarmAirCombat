@@ -1355,8 +1355,8 @@ class AerialBattle(MultiAgentEnv):
             1: {
                 'CE': 0.1,
                 'AL': 0.3,
-                'L': 0.4,
-                'CS': 0.2,
+                'L': 0.3,
+                'CS': 0.3,
 
                 'P': 0.0,
                 'CR': 0.0,
@@ -1395,9 +1395,8 @@ class AerialBattle(MultiAgentEnv):
                                           Versions[self.reward_version]['L'])
 
         # sparse reward for each step spent inside loitering lane. Custom metric definition
-        if abs(self.env_size[2]/2 - altitude) < 500 and abs(3000-center_dist) < 500:
+        if abs(self.env_size[2]/2 - altitude) < 1000 and abs(3000-center_dist) < 800:
             self.steps_in_lane = self.steps_in_lane + 1
-            reward_Flight['Loiter'] = 5
         else:
             self.steps_in_lane = 0
         
@@ -1480,7 +1479,7 @@ class AerialBattle(MultiAgentEnv):
             or aircraft.get_distance_from_centroid(self.bases) > self.max_size):
             self.Aircrafts[agent_index].kill()
             terminated = True
-            normalized_total_reward = -500
+            normalized_total_reward = -100
 
 
         self.episode_rewards[self.possible_agents[agent_index]].append(Total_Reward.copy())

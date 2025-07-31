@@ -220,12 +220,13 @@ algo_config = (
         gamma=tune.grid_search(alg_config['gamma']),
 
         twin_q=True,
-        actor_lr=tune.grid_search([0.0005, 0.0001, 0.00005]),
-        critic_lr = tune.grid_search([0.001, 0.0005, 0.0001]),
+        actor_lr=tune.grid_search([0.00005]),
+        critic_lr = tune.grid_search([0.0001]),
+        tau = 0.001,
         grad_clip=50,
         replay_buffer_config={
             'type': 'MultiAgentReplayBuffer',
-            'capacity': tune.grid_search([50000, 100000, 500000])
+            'capacity': tune.grid_search([50000]),
         }
     )
     .env_runners(
