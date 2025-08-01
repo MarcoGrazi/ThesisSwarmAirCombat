@@ -1363,6 +1363,66 @@ class AerialBattle(MultiAgentEnv):
                 'GFW': 1.0,
                 'PW': 0.0
             },
+            2: {
+                'AL': 0.4,
+                'L': 0.3,
+                'CS': 0.3,
+
+                'P': 0.0,
+                'CR': 0.0,
+                'G' : 0.0,
+
+                'GFW': 1.0,
+                'PW': 0.0
+            },
+            3: {
+                'AL': 0.3,
+                'L': 0.5,
+                'CS': 0.2,
+
+                'P': 0.0,
+                'CR': 0.0,
+                'G' : 0.0,
+
+                'GFW': 1.0,
+                'PW': 0.0
+            },
+            4: {
+                'AL': 0.5,
+                'L': 0.3,
+                'CS': 0.2,
+
+                'P': 0.0,
+                'CR': 0.0,
+                'G' : 0.0,
+
+                'GFW': 1.0,
+                'PW': 0.0
+            },
+            5: {
+                'AL': 0.3,
+                'L': 0.3,
+                'CS': 0.4,
+
+                'P': 0.0,
+                'CR': 0.0,
+                'G' : 0.0,
+
+                'GFW': 1.0,
+                'PW': 0.0
+            },
+            6: {
+                'AL': 0.3,
+                'L': 0.2,
+                'CS': 0.5,
+
+                'P': 0.0,
+                'CR': 0.0,
+                'G' : 0.0,
+
+                'GFW': 1.0,
+                'PW': 0.0
+            },
         }
 
         #### Flight Related Rewards ####
@@ -1372,7 +1432,7 @@ class AerialBattle(MultiAgentEnv):
         reward_Flight['Altitude'] = -((1/(1 + np.exp(-a_A * (abs_alt - mid_A)))) * 
                                       Versions[self.reward_version]['AL'])
         
-        a_S = 15
+        a_S = 10
         mid_S = 0.25
         abs_speed = abs(200-vel[0]) / 143
         reward_Flight['Cruise Speed'] = -((1/(1 + np.exp(-a_S * (abs_speed - mid_S)))) * 
@@ -1387,10 +1447,11 @@ class AerialBattle(MultiAgentEnv):
                                           Versions[self.reward_version]['L'])
 
         # sparse reward for each step spent inside loitering lane. Custom metric definition
-        if abs(self.env_size[2]/2 - altitude) < 1000 and abs(3000-center_dist) < 800:
+        if abs(self.env_size[2]/2 - altitude) < 1000 and abs(3000-center_dist) < 800 and abs(200-vel[0]) < 30:
             self.steps_in_lane = self.steps_in_lane + 1
-            reward_Flight['Loiter'] += 0.4 * 800/np.clip(abs(3000-center_dist), 80, 800)
-            reward_Flight['Altitude'] += 0.4 * 1000/np.clip(abs(self.env_size[2]/2 - altitude), 100, 1000)
+            reward_Flight['Loiter'] += (800/np.clip(abs(3000-center_dist), 80, 800)) * Versions[self.reward_version]['L']
+            reward_Flight['Altitude'] += (1000/np.clip(abs(self.env_size[2]/2 - altitude), 100, 1000)) * Versions[self.reward_version]['AL']
+            reward_Flight['Cruise Speed'] += (30/np.clip(abs(200-vel[0]), 3, 30)) * Versions[self.reward_version]['CS']
         else:
             self.steps_in_lane = 0
         

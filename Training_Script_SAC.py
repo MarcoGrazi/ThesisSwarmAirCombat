@@ -20,10 +20,10 @@ from ray.tune.registry import register_env
 
 # === Configuration Paths ===
 Folder = 'Training_Runs'
-RunName = 'Algorithm_Tuning'
-RunDescription = 'Explore different algorithm parameters for fixed gamma=0.999, train_batch_size=500.\n' \
-                 '-first search is among values for critic_lr, actor_lr and replay buffer capacity \n' \
-                 '-second search will focus on initial_alpha, alpha_lr, n_step, tau'
+RunName = 'Train1_GoodFlight_2'
+RunDescription = "Updated Algorithm after Algorithm_Tuning Phase, attempt 2 to loitering.\n" \
+                 "test of different configurations of the reward function and slight variations" \
+                 "of gamma and train_batch_size" 
 
 ConfigFile = 'Train_Run_config.yaml'
 Base_Checkpoint = ''
@@ -220,14 +220,14 @@ algo_config = (
         train_batch_size=tune.grid_search(alg_config['batch_size_per_learner']),
         gamma=tune.grid_search(alg_config['gamma']),
 
-        actor_lr=tune.grid_search([0.00003]),
-        critic_lr = tune.grid_search([0.0003]),
-        initial_alpha = tune.grid_search([0.3]),
-        tau = tune.grid_search([0.02, 0.01, 0.005]),
+        actor_lr=0.00003,
+        critic_lr = 0.0003,
+        initial_alpha = 0.3,
+        tau = 0.005,
         grad_clip=50,
         replay_buffer_config={
             'type': 'MultiAgentReplayBuffer',
-            'capacity': tune.grid_search([50000, 250000, 500000]),
+            'capacity': 400000,
         }
     )
     .env_runners(
