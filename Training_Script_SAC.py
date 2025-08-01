@@ -210,6 +210,7 @@ def policy_mapping_fn(agent_id, episode=0, **kwargs):
         return "team_1"
 
 
+
 # === Algorithm Configuration ===
 algo_config = (
     SACConfig()
@@ -219,21 +220,21 @@ algo_config = (
         train_batch_size=tune.grid_search(alg_config['batch_size_per_learner']),
         gamma=tune.grid_search(alg_config['gamma']),
 
-        twin_q=True,
-        actor_lr=tune.grid_search([0.00005]),
-        critic_lr = tune.grid_search([0.0001]),
-        tau = 0.001,
+        actor_lr=tune.grid_search([0.00003]),
+        critic_lr = tune.grid_search([0.0003]),
+        initial_alpha = tune.grid_search([0.3]),
+        tau = tune.grid_search([0.02, 0.01, 0.005]),
         grad_clip=50,
         replay_buffer_config={
             'type': 'MultiAgentReplayBuffer',
-            'capacity': tune.grid_search([50000]),
+            'capacity': tune.grid_search([50000, 250000, 500000]),
         }
     )
     .env_runners(
         num_env_runners=15,
-        num_envs_per_env_runner=2,
+        num_envs_per_env_runner=1,
         num_cpus_per_env_runner=1,
-        num_gpus_per_env_runner=0.065,
+        num_gpus_per_env_runner=0.06,
         batch_mode="truncate_episodes",
         sample_timeout_s=120
     )

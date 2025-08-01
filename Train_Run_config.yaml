@@ -15,7 +15,7 @@
       'action_frequency':10,
       'max_episode_length': 6000, #6000/10 = 600/60 = 10 minutes
       'team_number': 2,
-      'agent_number_team': 5,
+      'agent_number_team': 3,
       'agent_report_name': 'none',
       'missile_speed':600,
       'missile_max_acceleration': 10,
@@ -26,13 +26,13 @@
       'attack_vulnerability_cone': [60, 300, 5000],
       'base_vulnerability_distance': 1500,
       'collision_distance': 30,
-      'dummy': 'curve', # 'line', 'curve', 'none'
+      'dummy': 'fixed', # 'line', 'curve', 'none'
       'dummy_turn_radius':3000,
       'dummy_direction':1,
       'alive_agents_start': 1,
       'speed_step': 0.05,
-      'UpAngle_step': 0.01,
-      'SideAngle_step': 0.01,
+      'UpAngle_step': 0.001,
+      'SideAngle_step': 0.001,
       'screen_size' : [800, 800],
       'spawning_distance': 1500,
       'spawning_orientations': [[0], [0]] 

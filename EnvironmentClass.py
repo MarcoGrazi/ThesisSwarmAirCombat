@@ -183,7 +183,7 @@ class Aircraft:
         """
 
         # === 1. Convert normalized input angles to radians ===
-        max_angle_rad = np.deg2rad(45)  # maximum angular offset allowed by agent
+        max_angle_rad = np.deg2rad(30)  # maximum angular offset allowed by agent
         v_up   = action[0] * max_angle_rad    # vertical offset from forward
         v_side = action[1] * max_angle_rad    # lateral offset from forward
         v_speed = action[2]                  # speed stays normalized for now
@@ -197,8 +197,7 @@ class Aircraft:
 
         # === 3. Mode switch: use direct angles for large requests ===
         # If either angular offset is large (> ~5°), use direct up/side as AoA/sideslip
-        threshold_rad = np.deg2rad(5)
-        if abs(v_up) < threshold_rad and abs(v_side) < threshold_rad:
+        if v_up < 0 and abs(v_side) < (np.pi/10):
             # Direct control mode (use the agent's angles directly)
             AoA_rad = v_up
             sideslip_rad = v_side
@@ -221,7 +220,7 @@ class Aircraft:
 
         # === 4. Normalize all outputs to [-1, 1] (compatible with PID_Control scaling)===
         AoA_norm = AoA_rad / (np.pi/6)          # range: [-1, 1] corresponds to ±30°
-        sideslip_norm = sideslip_rad / threshold_rad  # range: ±5°
+        sideslip_norm = sideslip_rad / (np.pi/10)
         roll_norm = roll_rad / np.pi        # range: [-1, 1] corresponds to ±180°
         return [AoA_norm, sideslip_norm, roll_norm, v_speed]
 
@@ -601,7 +600,7 @@ class AerialBattle(MultiAgentEnv):
                                             team_base[1] + max_spawn_distance),
                             100, self.env_size[1] - 100)
 
-                z = np.random.uniform(-(self.env_size[2] - 200), -200)  # Spawn within combat area
+                z = -self.env_size[2] / 2  # Midpoint in altitude (Z+ down) # Spawn within combat area
 
             else:
                 # Testing mode — predictable altitude, closer to mid-range
@@ -1353,9 +1352,8 @@ class AerialBattle(MultiAgentEnv):
 
         Versions = {
             1: {
-                'CE': 0.1,
                 'AL': 0.3,
-                'L': 0.3,
+                'L': 0.4,
                 'CS': 0.3,
 
                 'P': 0.0,
@@ -1368,12 +1366,6 @@ class AerialBattle(MultiAgentEnv):
         }
 
         #### Flight Related Rewards ####
-        a_CE = 20
-        mid_CE = 0.6
-        abs_effort = (abs(action[0]) + abs(action[1])) / 2
-        reward_Flight['Control Effort'] = -((1/(1 + np.exp(-a_CE * (abs_effort - mid_CE)))) * 
-                                           Versions[self.reward_version]['CE'])
-
         a_A = 15
         mid_A = 0.25
         abs_alt = abs(self.env_size[2]/2 - altitude) / (self.env_size[2]/2)
@@ -1397,6 +1389,8 @@ class AerialBattle(MultiAgentEnv):
         # sparse reward for each step spent inside loitering lane. Custom metric definition
         if abs(self.env_size[2]/2 - altitude) < 1000 and abs(3000-center_dist) < 800:
             self.steps_in_lane = self.steps_in_lane + 1
+            reward_Flight['Loiter'] += 0.4 * 800/np.clip(abs(3000-center_dist), 80, 800)
+            reward_Flight['Altitude'] += 0.4 * 1000/np.clip(abs(self.env_size[2]/2 - altitude), 100, 1000)
         else:
             self.steps_in_lane = 0
         
@@ -2184,19 +2178,19 @@ def Test_env():
     # Define fixed actions per agent for evaluation
     # Format: [Up_Angle, Side_Angle, Speed, Fire], all normalized in body frame
     predefined_actions = [
-        [0, 0, 1, 0],
-        [0, 0, 1, 0],
-        [0, 0, 1, 0],
-        [0, 0, 1, 0],
-        [0, 0, 1, 0]
+        [0.08, 0.1, 1, 0],
+        [-0.07, 0, 1, 0],
+        [-0.07, 0, 1, 0],
+        [-0.07, 0, 1, 0],
+        [-0.07, 0, 1, 0]
     ]
 
     a = 0  # Action index pointer
 
     # Run simulation for 20 steps per predefined action set
-    for step in range(len(predefined_actions) * 50):
+    for step in range(len(predefined_actions) * 100):
         # Update the action index every 50 steps
-        if step % 50 == 0 and step != 0:
+        if step % 100 == 0 and step != 0:
             a += 1
 
         # Build action dictionary for alive agents
