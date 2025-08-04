@@ -215,7 +215,7 @@ def policy_mapping_fn(agent_id, episode=0, **kwargs):
 algo_config = (
     SACConfig()
     .api_stack(enable_rl_module_and_learner=False, enable_env_runner_and_connector_v2=False)
-    .environment(env="aerial_battle", env_config={'reward_version': tune.grid_search([1])})
+    .environment(env="aerial_battle", env_config={'reward_version': tune.grid_search([1,2,3])})
     .training(
         train_batch_size=tune.grid_search(alg_config['batch_size_per_learner']),
         gamma=tune.grid_search(alg_config['gamma']),
@@ -231,10 +231,10 @@ algo_config = (
         }
     )
     .env_runners(
-        num_env_runners=15,
-        num_envs_per_env_runner=1,
+        num_env_runners=1,
+        num_envs_per_env_runner=10,
         num_cpus_per_env_runner=1,
-        num_gpus_per_env_runner=0.06,
+        num_gpus_per_env_runner=0.2,
         batch_mode="truncate_episodes",
         sample_timeout_s=120
     )

@@ -1,9 +1,9 @@
 { 'alg_config':
   {
-    'batch_size_per_learner': [300, 500, 700],
-    'gamma': [0.997, 0.999, 0.9993],
-    'train_iterations': 12000,
-    'checkpoint_freq': 3000,
+    'batch_size_per_learner': [500],
+    'gamma': [0.999],
+    'train_iterations': 10000,
+    'checkpoint_freq': 2500,
     'checkpoint_length': 3000, #3000/10 = 300/60 = 5 minutes
 },
   'env_config' :
@@ -33,8 +33,8 @@
       'UpAngle_step': 0.001,
       'SideAngle_step': 0.001,
       'screen_size' : [800, 800],
-      'spawning_distance': 1500,
-      'spawning_orientations': [[0], [0]] 
+      'spawning_distance': 6000,
+      'spawning_orientations': [[0], [0, -90, 90]] 
     },
 
   'uav_config' :

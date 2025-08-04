@@ -584,33 +584,35 @@ class AerialBattle(MultiAgentEnv):
             testing  : bool — If True, use deterministic spawn altitude for evaluation
         """
 
+        centroid = np.mean(self.bases, axis=0)
+        centroid[2] = self.env_size[2]/2
+
         if alive:
             # === Alive agent: spawn near own base, inside vulnerability radius ===
-            team_base = self.bases[aircraft.get_team()]
 
             if not testing:
                 # Training mode — more randomized spawn
                 max_spawn_distance = self.spawning_distance
 
                 # Random XY position around the base, clipped to stay inside map bounds
-                x = np.clip(np.random.uniform(team_base[0] - max_spawn_distance,
-                                            team_base[0] + max_spawn_distance),
+                x = np.clip(np.random.uniform(centroid[0] - max_spawn_distance,
+                                            centroid[0] + max_spawn_distance),
                             100, self.env_size[0] - 100)
-                y = np.clip(np.random.uniform(team_base[1] - max_spawn_distance,
-                                            team_base[1] + max_spawn_distance),
+                y = np.clip(np.random.uniform(centroid[1] - max_spawn_distance,
+                                            centroid[1] + max_spawn_distance),
                             100, self.env_size[1] - 100)
 
                 z = -self.env_size[2] / 2  # Midpoint in altitude (Z+ down) # Spawn within combat area
 
             else:
                 # Testing mode — predictable altitude, closer to mid-range
-                max_spawn_distance = self.bases_vulnerability_distance
+                max_spawn_distance = self.spawning_distance
 
-                x = np.clip(np.random.uniform(team_base[0] - max_spawn_distance,
-                                            team_base[0] + max_spawn_distance),
+                x = np.clip(np.random.uniform(centroid[0] - max_spawn_distance,
+                                            centroid[0] + max_spawn_distance),
                             100, self.env_size[0] - 100)
-                y = np.clip(np.random.uniform(team_base[1] - max_spawn_distance,
-                                            team_base[1] + max_spawn_distance),
+                y = np.clip(np.random.uniform(centroid[1] - max_spawn_distance,
+                                            centroid[1] + max_spawn_distance),
                             100, self.env_size[1] - 100)
 
                 z = -self.env_size[2] / 2  # Midpoint in altitude (Z+ down)
@@ -625,13 +627,10 @@ class AerialBattle(MultiAgentEnv):
                 np.random.uniform(-(self.env_size[2] - 1000), -1000)  # Spawn far above
             ]
 
-        # === Orientation: face a random enemy base ===
-        base_ids = list(range(len(self.bases)))
-        base_ids.remove(aircraft.get_team())  # Remove own base index
-        target_base = np.random.choice(base_ids)
 
         # Compute orientation to target base (Euler angles or equivalent)
-        rand_orient = self.orientation_to_target(rand_pos, self.bases[target_base])
+        rand_orient = self.orientation_to_target(rand_pos, centroid)
+        #pitch = 0
         rand_orient[1] = 0
 
         # === Add randomness to orientation if in training mode ===
@@ -647,7 +646,7 @@ class AerialBattle(MultiAgentEnv):
             rand_orient[2] += np.deg2rad(np.random.choice(discrete_yaw))   # yaw
 
         # === Initial airspeed between 150–200 m/s ===
-        rand_speed = np.random.uniform(150, 200)
+        rand_speed = np.random.uniform(150, 250)
 
         # === Final step: apply the randomized state to the aircraft ===
         aircraft.reset(rand_pos, rand_orient, rand_speed, alive)
@@ -1364,9 +1363,9 @@ class AerialBattle(MultiAgentEnv):
                 'PW': 0.0
             },
             2: {
-                'AL': 0.4,
-                'L': 0.3,
-                'CS': 0.3,
+                'AL': 0.3,
+                'L': 0.2,
+                'CS': 0.5,
 
                 'P': 0.0,
                 'CR': 0.0,
@@ -1377,44 +1376,8 @@ class AerialBattle(MultiAgentEnv):
             },
             3: {
                 'AL': 0.3,
-                'L': 0.5,
-                'CS': 0.2,
-
-                'P': 0.0,
-                'CR': 0.0,
-                'G' : 0.0,
-
-                'GFW': 1.0,
-                'PW': 0.0
-            },
-            4: {
-                'AL': 0.5,
-                'L': 0.3,
-                'CS': 0.2,
-
-                'P': 0.0,
-                'CR': 0.0,
-                'G' : 0.0,
-
-                'GFW': 1.0,
-                'PW': 0.0
-            },
-            5: {
-                'AL': 0.3,
                 'L': 0.3,
                 'CS': 0.4,
-
-                'P': 0.0,
-                'CR': 0.0,
-                'G' : 0.0,
-
-                'GFW': 1.0,
-                'PW': 0.0
-            },
-            6: {
-                'AL': 0.3,
-                'L': 0.2,
-                'CS': 0.5,
 
                 'P': 0.0,
                 'CR': 0.0,
@@ -2285,5 +2248,5 @@ def Test_env():
     # Clean up environment (if needed)
     env.close()
 
-#Test_env()
+Test_env()
 
