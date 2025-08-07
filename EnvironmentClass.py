@@ -1471,6 +1471,11 @@ class AerialBattle(MultiAgentEnv):
             closure_norm = self.get_closure_rate_norm(aircraft, closest_enemy_plane)
             reward_Pursuit['Closure'] = (((2.0 / (1.0 + np.exp(-a_CL * (closure_norm - mid_CL)))) - 1.0) * 
                                          Versions[self.reward_version]['CR'])
+            
+            if missile_target != 'base':
+                Total_Reward['Attack'] = 20 * missile_tone_attack * track_angle
+                self.attack_metric += 1
+            Total_Reward['Defence'] = -30 * missile_tone_defence * adverse_angle
 
         else:
             #TODO: insert here some guidance to go towards the base and destroy it
@@ -1478,13 +1483,9 @@ class AerialBattle(MultiAgentEnv):
             reward_Pursuit['Closure'] = 0
         
         #Sparse Pursuit Rewards:
-        if missile_target != 'base':
-            Total_Reward['Attack'] = 20 * missile_tone_attack * track_angle
-            self.attack_metric += 1
-        else:
+        
+        if missile_target == 'base':
             Total_Reward['Attack'] = 0  #TODO: change in subsequent trainings to destroy the base
-
-        Total_Reward['Defence'] = -30 * missile_tone_defence * adverse_angle
 
         if kill != 'none':
             Total_Reward['Kill'] = 1000
