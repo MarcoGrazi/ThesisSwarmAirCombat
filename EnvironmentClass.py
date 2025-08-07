@@ -541,9 +541,9 @@ class AerialBattle(MultiAgentEnv):
 
                 # === Define Observation Space ===
                 # obs = [own data (28)
-                #        + 12×(other agents) [polar rel pos + closure + tracking + flags]
+                #        + 17×(other agents) [polar rel pos + polar_rel_vel + closure + tracking + flags]
                 #        + 11×(bases) (relative polar pos + vel + friend_or_foe)]
-                obs_dim = 28 + 12 * ((self.num_teams * self.num_agents_team) - 1) + 11 * self.num_teams
+                obs_dim = 28 + 17 * ((self.num_teams * self.num_agents_team) - 1) + 11 * self.num_teams
                 self.observation_spaces[agent_name] = gym.spaces.Box(
                     low=-1.5, high=1.5, shape=(obs_dim,), dtype=np.float64
                 )
