@@ -633,7 +633,7 @@ class AerialBattle(MultiAgentEnv):
         
 
         # === Initial airspeed between 150–200 m/s ===
-        rand_speed = np.random.choice([100, 140, 180])
+        rand_speed = np.random.choice([120, 140, 180, 250])
 
         # === Final step: apply the randomized state to the aircraft ===
         aircraft.reset(rand_pos, rand_orient, rand_speed, alive)
@@ -1106,7 +1106,9 @@ class AerialBattle(MultiAgentEnv):
 
         return new_missile_tone_attack, new_missile_tone_defence, new_missile_target
 
-    def is_within_cone(self, cone_origin, cone_direction, target_position, half_angle_deg, min_dist, max_dist):
+    def is_within_cone(self, cone_origin, cone_direction, target_position, angle_deg, min_dist, max_dist):
+        half_angle_deg = angle_deg / 2
+
         # Compute vector from the cone origin to the target
         vector_to_target = np.array(target_position) - np.array(cone_origin)
         distance = np.linalg.norm(vector_to_target)
@@ -1303,8 +1305,8 @@ class AerialBattle(MultiAgentEnv):
         los_unit = los_vec / (np.linalg.norm(los_vec) + 1e-6)  # prevent div by zero
         closure = -np.dot(rel_vel, los_unit)
         
-        # normalization based on empirically observed difference in speed (usually between 0 and 100)
-        return np.clip(closure/200, -1, 1)
+        #normalization based on arctangent function 
+        return np.atan(np.deg2rad(closure)) / np.atan(np.deg2rad(686))
 
 
     def get_individual_reward(self, agent_index, action, kill, missile_tone_attack, missile_tone_defence, missile_target):
@@ -1325,8 +1327,8 @@ class AerialBattle(MultiAgentEnv):
                 'AL': 0.5,
                 'CS': 0.5,
 
-                'P': 0.5,
-                'CR': 0.5,
+                'P': 0.3,
+                'CR': 0.7,
 
                 'GFW': 0.1,
                 'PW': 0.9
@@ -1335,8 +1337,8 @@ class AerialBattle(MultiAgentEnv):
                 'AL': 0.5,
                 'CS': 0.5,
 
-                'P': 0.5,
-                'CR': 0.5,
+                'P': 0.3,
+                'CR': 0.7,
 
                 'GFW': 0.2,
                 'PW': 0.8
@@ -1386,8 +1388,8 @@ class AerialBattle(MultiAgentEnv):
             shaped_pursuit = np.tan((adverse_angle-track_angle)*(np.pi/2.5)) / np.tan(np.pi/2.5)
             reward_Pursuit['Pursuit'] = shaped_pursuit * Versions[self.reward_version]['P']
 
-            # Closure
-            closure_dist_norm = self.get_closure_rate_norm(aircraft, closest_enemy_plane) * np.clip(dist/1000, 0, 1)
+            # Closure subject to minimum distance and adverse angle tuning
+            closure_dist_norm = (1+self.get_closure_rate_norm(aircraft, closest_enemy_plane)) * (adverse_angle-track_angle)
             reward_Pursuit['Closure'] = closure_dist_norm * Versions[self.reward_version]['CR']
             
             if missile_target != 'base':
@@ -1406,7 +1408,7 @@ class AerialBattle(MultiAgentEnv):
             Total_Reward['Attack'] = 0  #TODO: change in subsequent trainings to destroy the base
 
         if kill != 'none':
-            Total_Reward['Kill'] = 5000
+            Total_Reward['Kill'] = 2000
             self.kill_metric += 1
 
         normalized_reward_Pursuit = sum(reward_Pursuit.values())
@@ -1517,6 +1519,7 @@ class AerialBattle(MultiAgentEnv):
             if self.Aircrafts[agent_index].is_alive():
                 # === Process action ===
                 action = self.discretizer(a) if self.discretize else a
+                action[-1] = 1
 
                 # Step physics model
                 self.Aircrafts[agent_index].step(action, self.frequency_factor)

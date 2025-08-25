@@ -21,8 +21,8 @@
       'stepwise_tone_increment':0.01,
       'min_bases_distance': 10000,
       'env_size':[15000, 15000, 10000],
-      'max_size': 40000,
-      'attack_vulnerability_cone': [80, 300, 5000],
+      'max_size': 30000,
+      'attack_vulnerability_cone': [120, 1000, 5000],
       'base_vulnerability_distance': 1500,
       'collision_distance': 30,
       'dummy': 'line', # 'line', 'curve', 'none'
@@ -34,7 +34,7 @@
       'SideAngle_step': 0.001,
       'screen_size' : [800, 800],
       'spawning_distance': 3000,
-      'spawning_orientations': [[0], [0, 90, -90]] 
+      'spawning_orientations': [[0], [0, 90, -90, 180]] 
     },
 
   'uav_config' :
