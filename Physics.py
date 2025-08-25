@@ -302,7 +302,7 @@ class FixedWingAircraft:
         # === Gravitational force in body frame ===
         # Gravity vector in world frame: [0, 0, +mg] with Z-down convention
         # Convert to body frame by applying inverse rotation
-        F_weight = self.vehicle_to_body(-self.o[0], -self.o[1], -self.o[2]) @ np.array([0.0, 0.0, self.m * self.g])
+        F_weight = self.vehicle_to_body(self.o[0], self.o[1], self.o[2]) @ np.array([0.0, 0.0, self.m * self.g])
 
         # === Engine thrust force ===
         # Acts along the positive X-axis of the body frame

@@ -198,10 +198,10 @@ dummy_env.close()
 # === Define Multi-Agent Policy Specs ===
 policies = {
     "team_0": (None, obs_space, act_space, {
-        "model": {"fcnet_hiddens": [512, 512], "fcnet_activation": 'relu'},
+        "model": {"fcnet_hiddens": [256, 256], "fcnet_activation": 'relu'},
     }),
     "team_1": (None, obs_space, act_space, {
-        "model": {"fcnet_hiddens": [512, 512], "fcnet_activation": 'relu'},
+        "model": {"fcnet_hiddens": [256, 256], "fcnet_activation": 'relu'},
     }),
 }
 
@@ -223,7 +223,7 @@ def name_creator(trial):
 algo_config = (
     SACConfig()
     .api_stack(enable_rl_module_and_learner=False, enable_env_runner_and_connector_v2=False)
-    .environment(env="aerial_battle", env_config={'reward_version': tune.grid_search([1,2,3,4])})
+    .environment(env="aerial_battle", env_config={'reward_version': tune.grid_search([1])})
     .training(
         train_batch_size=tune.grid_search(alg_config['batch_size_per_learner']),
         gamma=tune.grid_search(alg_config['gamma']),
@@ -233,12 +233,12 @@ algo_config = (
             'critic_learning_rate': 0.0003,
             'entropy_learning_rate': 0.0003
             },
-        initial_alpha = 1,
+        initial_alpha = 0.5,
         tau = 0.005,
         grad_clip=50,
         replay_buffer_config={
             'type': 'MultiAgentReplayBuffer',
-            'capacity': tune.grid_search([250000, 400000, 500000]),
+            'capacity': tune.grid_search([500000]),
         }
     )
     .env_runners(

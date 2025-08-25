@@ -1,8 +1,8 @@
 { 'alg_config':
   {
     'batch_size_per_learner': [300, 500, 700],
-    'gamma': [0.99, 0.999, 0.9999, 0.99999],
-    'train_iterations': 20000,
+    'gamma': [0.99, 0.999, 0.9999],
+    'train_iterations': 6000,
     'checkpoint_freq': 1000,
     'checkpoint_length': 3000, #3000/10 = 300/60 = 5 minutes
 },
@@ -22,7 +22,7 @@
       'min_bases_distance': 10000,
       'env_size':[15000, 15000, 10000],
       'max_size': 40000,
-      'attack_vulnerability_cone': [50, 300, 5000],
+      'attack_vulnerability_cone': [80, 300, 5000],
       'base_vulnerability_distance': 1500,
       'collision_distance': 30,
       'dummy': 'line', # 'line', 'curve', 'none'
@@ -33,8 +33,8 @@
       'UpAngle_step': 0.001,
       'SideAngle_step': 0.001,
       'screen_size' : [800, 800],
-      'spawning_distance': 4000,
-      'spawning_orientations': [[0], [0,  180]] 
+      'spawning_distance': 3000,
+      'spawning_orientations': [[0], [0, 90, -90]] 
     },
 
   'uav_config' :

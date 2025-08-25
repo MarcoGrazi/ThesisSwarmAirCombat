@@ -432,16 +432,6 @@ class Aircraft:
         # Distance from base centroid (normalized)
         current_state.append(self.get_distance_from_centroid(bases) / max_size)  # 1
 
-        # Total specific energy (normalized)
-        specific_kinetic_energy = 0.5 * np.linalg.norm(telemetry["velocity"][-1])**2
-        specific_potential_energy = -telemetry['position'][-1][2] * 9.8
-        normalized_energy = (specific_kinetic_energy + specific_potential_energy) / 88224
-        current_state.append(normalized_energy)  # 1
-
-        # Last control commands (throttle, elevon, aileron, rudder)
-        prev_action = np.array(telemetry['commands'])[-1]
-        current_state.extend(prev_action)  # 4
-
         # Missile tones
         current_state.append(self.missile_tone_attack)   # 1
         current_state.append(self.missile_tone_defence)  # 1
@@ -540,10 +530,9 @@ class AerialBattle(MultiAgentEnv):
                 )
 
                 # === Define Observation Space ===
-                # obs = [own data (28)
+                # obs = [own data (23)
                 #        + 17×(other agents) [polar rel pos + polar_rel_vel + closure + tracking + flags]
-                #        + 11×(bases) (relative polar pos + vel + friend_or_foe)]
-                obs_dim = 28 + 17 * ((self.num_teams * self.num_agents_team) - 1) + 11 * self.num_teams
+                obs_dim = 23 + 17 * ((self.num_teams * self.num_agents_team) - 1)
                 self.observation_spaces[agent_name] = gym.spaces.Box(
                     low=-1.5, high=1.5, shape=(obs_dim,), dtype=np.float64
                 )
@@ -644,7 +633,7 @@ class AerialBattle(MultiAgentEnv):
         
 
         # === Initial airspeed between 150–200 m/s ===
-        rand_speed = np.random.choice([100, 130, 150, 180, 200])
+        rand_speed = np.random.choice([100, 140, 180])
 
         # === Final step: apply the randomized state to the aircraft ===
         aircraft.reset(rand_pos, rand_orient, rand_speed, alive)
@@ -999,15 +988,6 @@ class AerialBattle(MultiAgentEnv):
                         i_obs.append(self.Aircrafts[j].is_alive())  # 0 or 1
                         i_obs.append(self.Aircrafts[i].get_team() != self.Aircrafts[j].get_team())  # FoF: 0 = friend, 1 = foe
 
-                # === Add info about bases ===
-                for base in range(len(self.bases)):
-                    # Relative position and velocity
-                    i_obs.extend(self.relative_polar_pos_Body(i, base, 'base'))
-                    i_obs.extend(self.relative_polar_vel_Body(i, base, 'base'))
-
-                    # Base team flag (0 = own team, 1 = enemy)
-                    i_obs.append(self.Aircrafts[i].get_team() != base)
-
                 # === Postprocessing: numerical stability and clipping ===
                 i_obs = np.where(np.abs(i_obs) < 1e-9, 0.0, i_obs)  # Eliminate near-zero float noise
                 observations[i_agent] = np.array(np.clip(i_obs, -1, 1))  # Clip to [-1, 1] for normalized input
@@ -1323,7 +1303,8 @@ class AerialBattle(MultiAgentEnv):
         los_unit = los_vec / (np.linalg.norm(los_vec) + 1e-6)  # prevent div by zero
         closure = -np.dot(rel_vel, los_unit)
         
-        return closure/686
+        # normalization based on empirically observed difference in speed (usually between 0 and 100)
+        return np.clip(closure/200, -1, 1)
 
 
     def get_individual_reward(self, agent_index, action, kill, missile_tone_attack, missile_tone_defence, missile_target):
@@ -1341,31 +1322,8 @@ class AerialBattle(MultiAgentEnv):
 
         Versions = {
             1: {
-                'AL': 0.4,
-                'L': 0.2,
-                'CS': 0.4,
-
-                'P': 0.6,
-                'CR': 0.4,
-
-                'GFW': 0.1,
-                'PW': 0.9
-            },
-            2: {
-                'AL': 0.4,
-                'L': 0.2,
-                'CS': 0.4,
-
-                'P': 0.8,
-                'CR': 0.2,
-
-                'GFW': 0.1,
-                'PW': 0.9
-            },
-            3: {
-                'AL': 0.4,
-                'L': 0.2,
-                'CS': 0.4,
+                'AL': 0.5,
+                'CS': 0.5,
 
                 'P': 0.5,
                 'CR': 0.5,
@@ -1373,13 +1331,12 @@ class AerialBattle(MultiAgentEnv):
                 'GFW': 0.1,
                 'PW': 0.9
             },
-            4: {
-                'AL': 0.4,
-                'L': 0.2,
-                'CS': 0.4,
+            2: {
+                'AL': 0.5,
+                'CS': 0.5,
 
-                'P': 0.6,
-                'CR': 0.4,
+                'P': 0.5,
+                'CR': 0.5,
 
                 'GFW': 0.2,
                 'PW': 0.8
@@ -1406,17 +1363,6 @@ class AerialBattle(MultiAgentEnv):
                                       (70/np.clip(abs(self.env_size[2]/2 - altitude), 7, 70)) 
                                       * Versions[self.reward_version]['CS'])
         
-
-        center_dist = aircraft.get_distance_from_centroid(self.bases)
-        a_L = 8
-        mid_L = 0.3
-        abs_loiter = np.clip(abs(4000-center_dist) / 8000, 0, 1)
-        reward_Flight['Loiter'] = -((1/(1 + np.exp(-a_L * (abs_loiter - mid_L)))) * 
-                                          Versions[self.reward_version]['L'])
-        reward_Flight['Loiter'] += ((abs(4000-center_dist) < 1500) *
-                                    (1500/np.clip(abs(4000-center_dist), 150, 1500)) 
-                                    * Versions[self.reward_version]['L'])
-        
         normalized_reward_Flight = sum(reward_Flight.values())
 
 
@@ -1441,14 +1387,13 @@ class AerialBattle(MultiAgentEnv):
             reward_Pursuit['Pursuit'] = shaped_pursuit * Versions[self.reward_version]['P']
 
             # Closure
-            closure_norm = self.get_closure_rate_norm(aircraft, closest_enemy_plane)
-            shaped_closure = np.tan(closure_norm*(np.pi/2.5)) / np.tan(np.pi/2.5)
-            reward_Pursuit['Closure'] = shaped_closure * Versions[self.reward_version]['CR']
+            closure_dist_norm = self.get_closure_rate_norm(aircraft, closest_enemy_plane) * np.clip(dist/1000, 0, 1)
+            reward_Pursuit['Closure'] = closure_dist_norm * Versions[self.reward_version]['CR']
             
             if missile_target != 'base':
-                Total_Reward['Attack'] = 10 * missile_tone_attack * track_angle
+                Total_Reward['Attack'] = 5 * missile_tone_attack * track_angle
                 self.attack_metric += 1
-            Total_Reward['Defence'] = -10 * missile_tone_defence * adverse_angle
+            Total_Reward['Defence'] = -7 * missile_tone_defence * adverse_angle
 
         else:
             #TODO: insert here some guidance to go towards the base and destroy it
@@ -1461,7 +1406,7 @@ class AerialBattle(MultiAgentEnv):
             Total_Reward['Attack'] = 0  #TODO: change in subsequent trainings to destroy the base
 
         if kill != 'none':
-            Total_Reward['Kill'] = 1000
+            Total_Reward['Kill'] = 5000
             self.kill_metric += 1
 
         normalized_reward_Pursuit = sum(reward_Pursuit.values())
