@@ -2,7 +2,7 @@
   {
     'batch_size_per_learner': [700, 1000, 1200],
     'gamma': [0.99],
-    'train_iterations': 6000,
+    'train_iterations': 10000,
     'checkpoint_freq': 1000,
     'checkpoint_length': 3000, #3000/10 = 300/60 = 5 minutes
 },
@@ -22,10 +22,10 @@
       'min_bases_distance': 10000,
       'env_size':[15000, 15000, 10000],
       'max_size': 30000,
-      'attack_vulnerability_cone': [90, 1000, 5000],
+      'attack_vulnerability_cone': [120, 1000, 5000],
       'base_vulnerability_distance': 1500,
       'collision_distance': 30,
-      'dummy': 'line', # 'line', 'curve', 'none'
+      'dummy': 'line', # 'line', 'curve', 'none', 'mixed'
       'dummy_turn_radius':5000,
       'dummy_direction':1,
       'alive_agents_start': 1,

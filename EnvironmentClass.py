@@ -633,7 +633,7 @@ class AerialBattle(MultiAgentEnv):
         
 
         # === Initial airspeed between 150–200 m/s ===
-        rand_speed = np.random.choice([120, 140, 180, 250])
+        rand_speed = np.random.choice([120, 140, 180])
 
         # === Final step: apply the randomized state to the aircraft ===
         aircraft.reset(rand_pos, rand_orient, rand_speed, alive)
@@ -1192,7 +1192,7 @@ class AerialBattle(MultiAgentEnv):
         kill = 'none'
 
         # === Fire only if lock is strong enough ===
-        if missile_tone > 0.9:
+        if missile_tone > 0.5:
             # === Aircraft target ===
             if missile_target != 'base':
                 target_index = self.possible_agents.index(missile_target)
@@ -1327,16 +1327,35 @@ class AerialBattle(MultiAgentEnv):
 
         Versions = {
             1: {
-                'AL': 0.2,
-                'CS': 0.2,
+                'AL': 0.5,
+                'CS': 0.5,
 
                 'P': 0.3,
-                'CR': 0.5,
-                'E': 0.2,
+                'CR': 0.7,
 
                 'GFW': 0.1,
                 'PW': 0.9
             },
+            2: {
+                'AL': 0.5,
+                'CS': 0.5,
+
+                'P': 0.5,
+                'CR': 0.5,
+
+                'GFW': 0.1,
+                'PW': 0.9
+            },
+            3: {
+                'AL': 0.5,
+                'CS': 0.5,
+
+                'P': 0.7,
+                'CR': 0.3,
+
+                'GFW': 0.1,
+                'PW': 0.9
+            }
         }
 
         #### Flight Related Rewards ####
@@ -1383,14 +1402,10 @@ class AerialBattle(MultiAgentEnv):
             reward_Pursuit['Pursuit'] = shaped_pursuit * Versions[self.reward_version]['P']
 
             # Closure subject to minimum distance and adverse angle tuning
-            closure_dist_norm = ((1+self.get_closure_rate_norm(aircraft, closest_enemy_plane)) * (adverse_angle-track_angle)) - 1
+            closure_dist_norm = (1+self.get_closure_rate_norm(aircraft, closest_enemy_plane)) * (adverse_angle-track_angle)
             reward_Pursuit['Closure'] = closure_dist_norm * Versions[self.reward_version]['CR']
 
-            #Energy delta component based on accelerations
-            Kinetic_Energy_Delta = ((vel[0]-prev_vel[0])) 
-            Potential_Energy_Delta = ((altitude-prev_altitude)/(self.action_frequency**2))
-            reward_Pursuit['Energy_delta'] = (Kinetic_Energy_Delta + Potential_Energy_Delta) * Versions[self.reward_version]['E']
-            
+
             if missile_target != 'base':
                 Total_Reward['Attack'] = 5 * missile_tone_attack * track_angle
                 self.attack_metric += 1
