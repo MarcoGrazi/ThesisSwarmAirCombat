@@ -20,8 +20,8 @@ from ray.tune.registry import register_env
 
 # === Configuration Paths ===
 Folder = 'Training_Runs'
-RunName = 'Train3_Pursuit_4'
-RunDescription = "Pursuit training run 4 against line dummy.\n " 
+RunName = 'Train3_Pursuit_5'
+RunDescription = "Pursuit training run 5 against line dummy.\n " 
 
 ConfigFile = 'Train_Run_config.yaml'
 Base_Checkpoint = ''#'GoodFlight_Checkpoint'

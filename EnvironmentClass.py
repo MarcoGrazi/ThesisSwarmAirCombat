@@ -1192,7 +1192,7 @@ class AerialBattle(MultiAgentEnv):
         kill = 'none'
 
         # === Fire only if lock is strong enough ===
-        if missile_tone > 0.7:
+        if missile_tone > 0.9:
             # === Aircraft target ===
             if missile_target != 'base':
                 target_index = self.possible_agents.index(missile_target)
@@ -1319,29 +1319,23 @@ class AerialBattle(MultiAgentEnv):
         team = aircraft.get_team()
         telemetry = aircraft.get_agent_telemetry()
         vel = telemetry['velocity'][-1]
+        prev_vel = telemetry['velocity'][-2]
         altitude = -telemetry['position'][-1][2]
+        prev_altitude = -telemetry['position'][-2][2]
+        acceleration_body = telemetry['acceleration'][-1]
         actions = telemetry['commands']
 
         Versions = {
             1: {
-                'AL': 0.5,
-                'CS': 0.5,
+                'AL': 0.2,
+                'CS': 0.2,
 
                 'P': 0.3,
-                'CR': 0.7,
+                'CR': 0.5,
+                'E': 0.2,
 
                 'GFW': 0.1,
                 'PW': 0.9
-            },
-            2: {
-                'AL': 0.5,
-                'CS': 0.5,
-
-                'P': 0.3,
-                'CR': 0.7,
-
-                'GFW': 0.2,
-                'PW': 0.8
             },
         }
 
@@ -1389,8 +1383,13 @@ class AerialBattle(MultiAgentEnv):
             reward_Pursuit['Pursuit'] = shaped_pursuit * Versions[self.reward_version]['P']
 
             # Closure subject to minimum distance and adverse angle tuning
-            closure_dist_norm = (1+self.get_closure_rate_norm(aircraft, closest_enemy_plane)) * (adverse_angle-track_angle)
+            closure_dist_norm = ((1+self.get_closure_rate_norm(aircraft, closest_enemy_plane)) * (adverse_angle-track_angle)) - 1
             reward_Pursuit['Closure'] = closure_dist_norm * Versions[self.reward_version]['CR']
+
+            #Energy delta component based on accelerations
+            Kinetic_Energy_Delta = ((vel[0]-prev_vel[0])) 
+            Potential_Energy_Delta = ((altitude-prev_altitude)/(self.action_frequency**2))
+            reward_Pursuit['Energy_delta'] = (Kinetic_Energy_Delta + Potential_Energy_Delta) * Versions[self.reward_version]['E']
             
             if missile_target != 'base':
                 Total_Reward['Attack'] = 5 * missile_tone_attack * track_angle
@@ -2116,11 +2115,11 @@ def Test_env():
     # Define fixed actions per agent for evaluation
     # Format: [Up_Angle, Side_Angle, Speed, Fire], all normalized in body frame
     predefined_actions = [
-        [0.003, 0, 1, 0],
-        [0.003, 0, 1, 0],
-        [0.003, 0, 1, 0],
-        [0.003, 0, 1, 0],
-        [0.003, 0, 1, 0]
+        [0.000, 0, 1, 0],
+        [0.000, 0, 1, 0],
+        [0.000, 0, 1, 0],
+        [0.000, 0, 1, 0],
+        [0.000, 0, 1, 0]
     ]
 
     a = 0  # Action index pointer
