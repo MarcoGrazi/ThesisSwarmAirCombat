@@ -633,7 +633,7 @@ class AerialBattle(MultiAgentEnv):
         
 
         # === Initial airspeed between 150–200 m/s ===
-        rand_speed = np.random.choice([120, 140, 180])
+        rand_speed = np.random.choice([120, 140, 160])
 
         # === Final step: apply the randomized state to the aircraft ===
         aircraft.reset(rand_pos, rand_orient, rand_speed, alive)
@@ -696,7 +696,10 @@ class AerialBattle(MultiAgentEnv):
             aircraft = self.Aircrafts[index]
 
             self.init_airplane(aircraft, alive=True, testing=testing, team=t)
-            aircraft.set_dummy(self.dummy, self.turn_radius, self.direction)
+            dummy_type = self.dummy
+            if dummy_type == 'mixed':
+                dummy_type = np.random.choice(['line', 'curve'])
+            aircraft.set_dummy(dummy_type, self.turn_radius, self.direction)
 
         # === Return initial observation and info ===
         return self.get_obs(), {'__common__': {'attack_steps' : self.attack_metric, 'kills': self.kill_metric}}
@@ -1340,8 +1343,8 @@ class AerialBattle(MultiAgentEnv):
                 'AL': 0.5,
                 'CS': 0.5,
 
-                'P': 0.5,
-                'CR': 0.5,
+                'P': 0.2,
+                'CR': 0.8,
 
                 'GFW': 0.1,
                 'PW': 0.9
@@ -1350,12 +1353,22 @@ class AerialBattle(MultiAgentEnv):
                 'AL': 0.5,
                 'CS': 0.5,
 
-                'P': 0.7,
-                'CR': 0.3,
+                'P': 0.1,
+                'CR': 0.9,
 
                 'GFW': 0.1,
                 'PW': 0.9
-            }
+            }, 
+            4: {
+                'AL': 0.5,
+                'CS': 0.5,
+
+                'P': 0.0,
+                'CR': 1.0,
+
+                'GFW': 0.1,
+                'PW': 0.9
+            }   
         }
 
         #### Flight Related Rewards ####
@@ -2176,5 +2189,5 @@ def Test_env():
     # Clean up environment (if needed)
     env.close()
 
-#Test_env()
+Test_env()
 

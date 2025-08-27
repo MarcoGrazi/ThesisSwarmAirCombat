@@ -1,6 +1,6 @@
 { 'alg_config':
   {
-    'batch_size_per_learner': [700, 1000, 1200],
+    'batch_size_per_learner': [1200, 1500],
     'gamma': [0.99],
     'train_iterations': 10000,
     'checkpoint_freq': 1000,
@@ -25,7 +25,7 @@
       'attack_vulnerability_cone': [120, 1000, 5000],
       'base_vulnerability_distance': 1500,
       'collision_distance': 30,
-      'dummy': 'line', # 'line', 'curve', 'none', 'mixed'
+      'dummy': 'mixed', # 'line', 'curve', 'none', 'mixed'
       'dummy_turn_radius':5000,
       'dummy_direction':1,
       'alive_agents_start': 1,

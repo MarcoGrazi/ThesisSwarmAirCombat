@@ -20,11 +20,11 @@ from ray.tune.registry import register_env
 
 # === Configuration Paths ===
 Folder = 'Training_Runs'
-RunName = 'Train3_Pursuit_5'
+RunName = 'Train3_Pursuit_6'
 RunDescription = "Pursuit training run 5 against line dummy.\n " 
 
 ConfigFile = 'Train_Run_config.yaml'
-Base_Checkpoint = ''#'GoodFlight_Checkpoint'
+Base_Checkpoint = 'Base_Checkpoint'#'GoodFlight_Checkpoint'
 Base_Policy_restore = ['team_0']  # Policies to restore from checkpoint
 
 # Path where training data and checkpoints will be stored
@@ -222,7 +222,7 @@ def name_creator(trial):
 algo_config = (
     SACConfig()
     .api_stack(enable_rl_module_and_learner=False, enable_env_runner_and_connector_v2=False)
-    .environment(env="aerial_battle", env_config={'reward_version': tune.grid_search([1,2,3])})
+    .environment(env="aerial_battle", env_config={'reward_version': tune.grid_search([1,2,3,4])})
     .training(
         train_batch_size=tune.grid_search(alg_config['batch_size_per_learner']),
         gamma=tune.grid_search(alg_config['gamma']),
