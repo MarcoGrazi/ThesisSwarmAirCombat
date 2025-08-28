@@ -24,7 +24,7 @@ RunName = 'Train3_Pursuit_7'
 RunDescription = "Pursuit training run 7 against randomly manouvering dummy.\n " 
 
 ConfigFile = 'Train_Run_config.yaml'
-Base_Checkpoint = 'Base_Checkpoint'#'GoodFlight_Checkpoint'
+Base_Checkpoint = 'Train6_BestCheckpoint'
 Base_Policy_restore = ['team_0']  # Policies to restore from checkpoint
 
 # Path where training data and checkpoints will be stored
@@ -66,7 +66,7 @@ class SaveArtifactsOnCheckpoint(DefaultCallbacks):
 
             env = algorithm.env_creator({'reward_version': 1})  # Must be num_env_runners = 1
 
-            for i in range(3):  # Save 5 rollouts
+            for i in range(5):  # Save 5 rollouts
                 checkpoint_dir_i = os.path.join(checkpoint_dir, f"{i}")
                 os.makedirs(checkpoint_dir_i, exist_ok=True)
 
@@ -164,7 +164,8 @@ class CallbacksBroker(DefaultCallbacks):
             checkpoint_path = os.path.join(storage_path, RunName, Base_Checkpoint)
             for id in Base_Policy_restore:
                 restored = algorithm.get_policy(id).from_checkpoint(checkpoint_path)[id]
-                algorithm.get_policy(id).set_weights(restored.get_weights())
+                weights = restored.get_weights()
+                algorithm.get_policy(id).set_weights(weights)
                 print(f"Loaded policy {id}")
             print("\n++++++++++++++++++++++ Checkpoint Loaded +++++++++++++++++++++\n")
 

@@ -1359,6 +1359,17 @@ class AerialBattle(MultiAgentEnv):
                 'AL': 0.5,
                 'CS': 0.5,
 
+                'P': 0.3,
+                'CR': 0.7,
+                'D': 'yes',
+
+                'GFW': 0.1,
+                'PW': 0.9
+            },
+            3: {
+                'AL': 0.5,
+                'CS': 0.5,
+
                 'P': 0.1,
                 'CR': 0.9,
                 'D': 'no',
@@ -1366,7 +1377,7 @@ class AerialBattle(MultiAgentEnv):
                 'GFW': 0.1,
                 'PW': 0.9
             },
-            3: {
+            4: {
                 'AL': 0.5,
                 'CS': 0.5,
 
@@ -1441,7 +1452,7 @@ class AerialBattle(MultiAgentEnv):
                 closure_dist_norm = (1+self.get_closure_rate_norm(aircraft, closest_enemy_plane)) * (adverse_angle-track_angle)
                 reward_Pursuit['Closure'] = closure_dist_norm * Versions[self.reward_version]['CR']
 
-                reward_Pursuit['Distance'] = distance_dampener * 0.3
+                reward_Pursuit['Distance'] = -distance_dampener * 0.3
 
 
             if missile_target != 'base':
@@ -2214,5 +2225,5 @@ def Test_env():
     # Clean up environment (if needed)
     env.close()
 
-Test_env()
+#Test_env()
 
