@@ -165,10 +165,10 @@ class Aircraft:
                 self.physical_model.dummy_step(self.random_dummy_type, self.turn_radius, self.direction)
                 self.random_dummy_counter += 1
 
-                if self.random_dummy_counter > 300*frequency_factor:
+                if self.random_dummy_counter > 250*frequency_factor:
                     self.random_dummy_counter = 0
                     self.random_dummy_type = np.random.choice(['line', 'curve'])
-                    self.turn_radius = np.random.choice([2500, 5000, 7500])
+                    self.turn_radius = np.random.choice([2000, 3000, 4000, 5000, 6000])
                     self.direction = np.random.choice([1, -1])
 
             else:
