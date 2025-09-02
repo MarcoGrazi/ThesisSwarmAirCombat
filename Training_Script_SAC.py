@@ -20,12 +20,12 @@ from ray.tune.registry import register_env
 
 # === Configuration Paths ===
 Folder = 'Training_Runs'
-RunName = 'Train3_Pursuit_8'
-RunDescription = "Pursuit training run 8 against randomly manouvering dummy.\n " \
+RunName = 'Train3_Pursuit_9'
+RunDescription = "Pursuit training run 9 against randomly manouvering dummy.\n " \
 "objective: teach to maintain optimal distance from target, by matching its velocity" 
 
 ConfigFile = 'Train_Run_config.yaml'
-Base_Checkpoint = 'Train6_BestCheckpoint'
+Base_Checkpoint = ''
 Base_Policy_restore = ['team_0']  # Policies to restore from checkpoint
 
 # Path where training data and checkpoints will be stored

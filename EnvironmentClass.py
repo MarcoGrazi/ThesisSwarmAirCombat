@@ -1433,7 +1433,7 @@ class AerialBattle(MultiAgentEnv):
 
                 abs_closure_norm = abs(self.get_closure_rate_norm(aircraft, closest_enemy_plane))
                 closure_dist_norm_near = (1-abs_closure_norm) * (adverse_angle-track_angle) * inverse_distance_dampener
-                reward_Pursuit['Closure_Near'] = closure_dist_norm_far * Versions[self.reward_version]['CR']
+                reward_Pursuit['Closure_Near'] = closure_dist_norm_near * Versions[self.reward_version]['CR']
 
             if missile_target != 'base':
                 Total_Reward['Attack'] = 15 * missile_tone_attack * track_angle
