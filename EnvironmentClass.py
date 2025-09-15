@@ -1059,7 +1059,7 @@ class AerialBattle(MultiAgentEnv):
         max_defence_tone = 0    # max tone this agent receives from enemies
 
         # Only perform tone updates if not already locked defensively
-        if new_missile_tone_defence < 0.5:
+        if new_missile_tone_defence < 0.2:
             for i, aircraft in enumerate(self.Aircrafts):
                 if i != agent_index and aircraft.is_alive() and aircraft.get_team() != team:
                     # Check mutual intersection of cones
@@ -1212,7 +1212,7 @@ class AerialBattle(MultiAgentEnv):
         kill = 'none'
 
         # === Fire only if lock is strong enough ===
-        if missile_tone > 0.8:
+        if missile_tone > 0.5:
             # === Aircraft target ===
             if missile_target != 'base':
                 target_index = self.possible_agents.index(missile_target)
@@ -1339,7 +1339,7 @@ class AerialBattle(MultiAgentEnv):
         team = aircraft.get_team()
         telemetry = aircraft.get_agent_telemetry()
         vel = telemetry['velocity'][-1]
-        AoA = telemetry['AoA'][-1]
+        AoA = np.rad2deg(telemetry['AoA'][-1])
         altitude = -telemetry['position'][-1][2]
         optimal_distance = (aircraft.get_cone()[1] + aircraft.get_cone()[2])/2
         actions = telemetry['commands']
@@ -1347,22 +1347,11 @@ class AerialBattle(MultiAgentEnv):
         Versions = {
             1: {
                 'AL': 0.5,
-                'CS': 0.5,
+                'CS': 0.2,
+                'AoA': 0.3,
 
                 'P': 0.1,
                 'CR': 0.9,
-                'D': 'yes',
-
-                'GFW': 0.1,
-                'PW': 0.9
-            },
-            2: {
-                'AL': 0.5,
-                'CS': 0.5,
-
-                'P': 0.1,
-                'CR': 0.9,
-                'D': 'no',
 
                 'GFW': 0.1,
                 'PW': 0.9
@@ -1390,12 +1379,10 @@ class AerialBattle(MultiAgentEnv):
                                       (70/np.clip(abs(self.env_size[2]/2 - altitude), 7, 70)) 
                                       * Versions[self.reward_version]['CS'])
         
-        normalized_reward_Flight = sum(reward_Flight.values())
-
-        if AoA>=20:
-            reward_Pursuit['AoA'] = -0.3 * (abs(AoA-20)/10) 
-
-
+        reward_Flight['AoA'] = -Versions[self.reward_version]['AoA'] * max(abs(AoA)-20, 0) 
+        reward_Flight['Stall_Velocity'] = -3 * (vel[0]<100) 
+        
+        
         #### Pursuit related Rewards ####
         # Choose Enemy Plane
         closest_enemy_plane = None
@@ -1416,53 +1403,24 @@ class AerialBattle(MultiAgentEnv):
             shaped_pursuit = np.tan((adverse_angle-track_angle)*(np.pi/2.5)) / np.tan(np.pi/2.5)
             reward_Pursuit['Pursuit'] = shaped_pursuit * Versions[self.reward_version]['P']
 
-            
-            # Closure subject to minimum distance and adverse angle tuning and distance dampener
-            optimal_distance_error = abs(dist-optimal_distance)
-            distance_dampener = np.atan(np.deg2rad(optimal_distance_error/3)) / np.atan(np.deg2rad(2000))
-            inverse_distance_dampener = 1-distance_dampener
-            
-            if Versions[self.reward_version]['D']=='no':
-                closure_dist_norm = (1+self.get_closure_rate_norm(aircraft, closest_enemy_plane)) * (adverse_angle-track_angle)
-                reward_Pursuit['Closure'] = closure_dist_norm * Versions[self.reward_version]['CR']
-            
-            elif Versions[self.reward_version]['D']=='yes':
-                closure_dist_norm_far = ((1+self.get_closure_rate_norm(aircraft, closest_enemy_plane)) * (adverse_angle-track_angle) 
-                                     * distance_dampener)
-                reward_Pursuit['Closure_Far'] = closure_dist_norm_far * Versions[self.reward_version]['CR']
+            closure_dist_norm = (1+self.get_closure_rate_norm(aircraft, closest_enemy_plane)) * (adverse_angle-track_angle)
+            reward_Pursuit['Closure'] = closure_dist_norm * Versions[self.reward_version]['CR']
 
-                abs_closure_norm = abs(self.get_closure_rate_norm(aircraft, closest_enemy_plane))
-                closure_dist_norm_near = (1-abs_closure_norm) * (adverse_angle-track_angle) * inverse_distance_dampener
-                reward_Pursuit['Closure_Near'] = closure_dist_norm_near * Versions[self.reward_version]['CR']
+            reward_Pursuit['Safe_Distance'] = -5 * (dist<1500)
 
-            if missile_target != 'base':
-                Total_Reward['Attack'] = 15 * missile_tone_attack * track_angle
+            if missile_target != 'base' and missile_target != 'none':
+                reward_Pursuit['Attack'] = 15 * missile_tone_attack * track_angle
                 self.attack_metric += 1
-            Total_Reward['Defence'] = -20 * missile_tone_defence * adverse_angle
+            reward_Pursuit['Defence'] = -20 * missile_tone_defence * adverse_angle
 
         else:
-            #TODO: insert here some guidance to go towards the base and destroy it
             reward_Pursuit['Pursuit'] = 0
             reward_Pursuit['Closure'] = 0
         
         #Sparse Pursuit Rewards:
-        
-        if missile_target == 'base':
-            Total_Reward['Attack'] = 0  #TODO: change in subsequent trainings to destroy the base
-
         if kill != 'none':
-            Total_Reward['Kill'] = 2000
+            reward_Pursuit['Kill'] = 2000
             self.kill_metric += 1
-
-        normalized_reward_Pursuit = sum(reward_Pursuit.values())
-
-
-        #### Reward Merge ####
-        Total_Reward.update(reward_Flight)
-        Total_Reward.update(reward_Pursuit)
-
-        normalized_total_reward = (Versions[self.reward_version]['GFW'] * normalized_reward_Flight +
-                                    Versions[self.reward_version]['PW'] * normalized_reward_Pursuit)
 
         #### Termination Condition Rewards ####
         acc=0
@@ -1472,12 +1430,22 @@ class AerialBattle(MultiAgentEnv):
         #check collision or over-g
         if (self.check_collision(agent_index) 
             or acc >= (20*9.81) 
-            or vel[0]<80 
+            or vel[0]<50 
             or altitude>self.env_size[2]
             or aircraft.get_distance_from_centroid(self.bases) > self.max_size):
             self.Aircrafts[agent_index].kill()
             terminated = True
-            normalized_total_reward = -1000
+            reward_Flight['Termination'] = -1000
+        
+
+        #### Reward Merge ####
+        Total_Reward.update(reward_Flight)
+        Total_Reward.update(reward_Pursuit)
+        normalized_reward_Pursuit = sum(reward_Pursuit.values())
+        normalized_reward_Flight = sum(reward_Flight.values())
+
+        normalized_total_reward = (Versions[self.reward_version]['GFW'] * normalized_reward_Flight +
+                                    Versions[self.reward_version]['PW'] * normalized_reward_Pursuit)
 
 
         self.episode_rewards[self.possible_agents[agent_index]].append(Total_Reward.copy())
