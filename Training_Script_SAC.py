@@ -97,7 +97,8 @@ def ExecuteEpisode(env, algorithm, checkpoint_dir, i):
     if hasattr(env, "plot_rewards"):
         env.plot_rewards(checkpoint_dir_i)
 
-    return env.get_winning_team()
+    if Adversary_Base_Checkpoint:
+        return env.get_winning_team()
 
 def TrueSkill(rank, Current_Pair_rating, Starting_Agents_Number):
     rate_team_0 = [Current_Pair_rating['team_0']] * Starting_Agents_Number
@@ -357,7 +358,6 @@ class CustomWandbCallback(DefaultCallbacks):
 
         wandb.log(payload, step=step)
 
-
 # Broker to combine multiple callbacks and restore from a base checkpoint
 class CallbacksBroker(DefaultCallbacks):
     def __init__(self):
@@ -463,7 +463,7 @@ def name_creator(trial):
 algo_config = (
     SACConfig()
     .api_stack(enable_rl_module_and_learner=False, enable_env_runner_and_connector_v2=False)
-    .environment(env="aerial_battle", env_config={'reward_version': tune.grid_search([1,2,3,4,5,6])})
+    .environment(env="aerial_battle", env_config={'reward_version': tune.grid_search([1,2,3,4])})
     .training(
         train_batch_size=tune.grid_search(alg_config['batch_size_per_learner']),
         gamma=tune.grid_search(alg_config['gamma']),
@@ -473,7 +473,7 @@ algo_config = (
             'critic_learning_rate': 0.0003,
             'entropy_learning_rate': 0.0003
             },
-        initial_alpha = 0.5,
+        initial_alpha = 1,
         tau = 0.005,
         grad_clip=50,
         replay_buffer_config={

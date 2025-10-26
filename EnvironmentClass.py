@@ -1111,6 +1111,7 @@ class AerialBattle(MultiAgentEnv):
                     # Attacker cone → defender (can I hit them?)
                     intersect = self.check_intersect_cones(attack_cone, attack_pos, attack_vel,
                                                         defence_cone, defence_pos, defence_vel)
+                    
 
                     # Defender cone → attacker (can they hit me?)
                     intersected = self.check_intersect_cones(defence_cone, defence_pos, defence_vel,
@@ -1124,7 +1125,7 @@ class AerialBattle(MultiAgentEnv):
                     if intersected and defence_tone > max_defence_tone:
                         max_defence_tone = defence_tone
 
-        elif len(possible_targets) > 0:
+        if len(possible_targets) > 0:
             # If we're aiming at an aircraft
             if new_missile_target in possible_targets:
                 new_missile_tone_attack = np.clip(
@@ -1200,7 +1201,6 @@ class AerialBattle(MultiAgentEnv):
             attack_min_dist,
             attack_max_dist
         )
-
         # Check if attacker is within defender's rearward vulnerability cone
         defender_check = self.is_within_cone(
             defence_pos,
@@ -1283,18 +1283,15 @@ class AerialBattle(MultiAgentEnv):
 
         if type == 'aircraft':
             # === Estimate intercept time ===
-            distance = np.linalg.norm(self.relative_pos(defender, attacker, 'aircraft'))
-            attack_cone, _ = attacker.get_cones()
-            _, defence_cone = defender.get_cones()
-            track_angle, adverse_angle = self.get_track_adverse_angles_norm(attacker, defender)
+            att_aircraft = self.Aircrafts[attacker]
+            def_aircraft = self.Aircrafts[defender]
+            attack_cone, _ = att_aircraft.get_cones()
+            _, defence_cone = def_aircraft.get_cones()
+            track_angle, adverse_angle = self.get_track_adverse_angles_norm(att_aircraft, def_aircraft)
 
             att_angle_margin = (np.deg2rad(attack_cone[0]/2)-(np.pi*track_angle)) / np.deg2rad(attack_cone[0]/2)
             def_angle_margin = (adverse_angle*np.pi)-(np.deg2rad(defence_cone[0]/2)) / np.deg2rad(defence_cone[0]/2)
             bernoulli_threshold = att_angle_margin * def_angle_margin * tone
-
-        elif type == 'base':
-            # Simpler model for static base: probability proportional to tone
-            bernoulli_threshold = tone
 
         # === Sample a Bernoulli trial ===
         sample = np.random.uniform(0.0, 1.0)
@@ -1408,15 +1405,11 @@ class AerialBattle(MultiAgentEnv):
 
             Angle_advantage = (abs(adverse_angle)-abs(track_angle))
 
-            Closure_Mix = (closure * (1-track_angle))
+            Closure_Mix = (closure * (1-abs(track_angle)))
 
-            if reward_config['mode'] == 'LINEAR':
-                reward_Pursuit['Pursuit'] = reward_config['PW'] * Angle_advantage
-                reward_Pursuit['Closure'] = reward_config['CW'] * Closure_Mix
-
-            elif reward_config['mode'] == 'TANGENT':
-                reward_Pursuit['Pursuit'] = reward_config['PW'] * np.tan(1.2 * Angle_advantage) / np.tan(1.2)
-                reward_Pursuit['Closure'] = reward_config['CW'] * np.tan(1.2 * Closure_Mix) / np.tan(1.2)
+            TPAR = reward_config['tan_parameter']
+            reward_Pursuit['Pursuit'] = reward_config['PW'] * np.tan(Angle_advantage*(np.pi/TPAR)) / np.tan((np.pi/TPAR))
+            reward_Pursuit['Closure'] = reward_config['CW'] * np.tan(Closure_Mix*(np.pi/TPAR)) / np.tan((np.pi/TPAR))
 
             #Sparse Pursuit Rewards:
             sparse_reward['Attack_Tone'] = reward_config['att_tone_bonus'] * missile_tone_attack * abs(adverse_angle)
@@ -1615,6 +1608,27 @@ class AerialBattle(MultiAgentEnv):
         # === Optional: Add team-based rewards here ===
         # (e.g., base destruction, shared victories, assists, etc.)
         return self.get_obs(), rewards, terminated, truncated, {'__common__': {'attack_steps' : self.attack_metric, 'kills': self.kill_metric}}
+
+    def get_winning_team(self):
+        result = ''
+        score = {}
+        for team in range(self.num_teams):
+            score[f'team_{team}'] = 0
+            for air in range(self.num_agents_team):
+                aircraft = self.Aircrafts[team*self.num_agents_team + air]
+                score[f'team_{team}'] += aircraft.get_reward()
+                if aircraft.is_alive():
+                    score[f'team_{team}'] += 2000
+
+        
+        # NumPy arrays aligned with dict order
+        teams  = np.array(list(score.keys()))
+        scores = np.array(list(score.values()))
+        m = scores.max()
+        mask = scores != m
+        tied = np.any((m - scores[mask]) <= 300)
+
+        return "draw" if tied else teams[np.argmax(scores)]
 
     def body_to_vehicle(self, roll, pitch, yaw):
         """

@@ -17,7 +17,7 @@
       'agent_number_team': 3,
       'agent_report_name': 'none',
       'plane_model': [0, 0],  # Select UAV model for each team (1, 2, or 3)
-      'stepwise_tone_increment':0.1,
+      'stepwise_tone_increment':0.01,
       'tone_threshold':0.5,
       'autotrigger': True,
       'trigger_threshold': 0,
@@ -36,9 +36,9 @@
       'UpAngle_step': 0.001,
       'SideAngle_step': 0.001,
       'screen_size' : [800, 800],
-      'spawning_distance': 3250,
-      'spawning_orientations': [[0, -10, 10], [0, 90, -90, 180]],
-      'spawning_speeds': [140, 160, 180],
+      'spawning_distance': 2000,
+      'spawning_orientations': [[0, 10, -10], [0, 90, -90, 180]],
+      'spawning_speeds': [120, 140, 160, 180],
       'reward_versions': {
             1: {
                 'GFW': 0.3,   # Flight Reward Weight
@@ -57,12 +57,12 @@
                 'Terminal_Speed': 80.0,
                 'Critical_Altitude': 3500.0,
                 'optimal_zone_width': 1000,
-                'att_tone_bonus': 10.0,
-                'def_tone_bonus': 2,
-                'Trigger_Penalty': 0.3,
+                'att_tone_bonus': 20.0,
+                'def_tone_bonus': 10,
+                'Trigger_Penalty': 0.5,
                 'kill_bonus': 1000,
                 'terminal_penalty': 500,
-                'mode': 'LINEAR',
+                'tan_parameter':2.5  # linear for tan_parameter=5, sparse for tan_parameter=2
             },
             2: {
                 'GFW': 0.3,   # Flight Reward Weight
@@ -81,21 +81,21 @@
                 'Terminal_Speed': 80.0,
                 'Critical_Altitude': 3500.0,
                 'optimal_zone_width': 1000,
-                'att_tone_bonus': 10.0,
-                'def_tone_bonus': 2,
-                'Trigger_Penalty': 0.3,
+                'att_tone_bonus': 20,
+                'def_tone_bonus': 10,
+                'Trigger_Penalty': 0.5,
                 'kill_bonus': 1000,
                 'terminal_penalty': 500,
-                'mode': 'TANGENT',
+                'tan_parameter':2.2  # linear for tan_parameter=5, sparse for tan_parameter=2
             },
             3: {
                 'GFW': 0.3,   # Flight Reward Weight
                 'PW': 0.7,    # Pursuit Reward Weight
                 'CW': 0.7,
                 'PW': 0.3,
-                'AoA_W': 0.5,
+                'AoA_W': 0.0,
                 'Sideslip_W': 0.0,
-                'Speed_W': 0.0,
+                'Speed_W': 0.5,
                 'Altitude_W': 0.5,
                 'Critical_AoA': 30,
                 'Terminal_AoA': 60,
@@ -105,46 +105,22 @@
                 'Terminal_Speed': 80.0,
                 'Critical_Altitude': 3500.0,
                 'optimal_zone_width': 1000,
-                'att_tone_bonus': 10.0,
-                'def_tone_bonus': 2,
-                'Trigger_Penalty': 0.3,
+                'att_tone_bonus': 20.0,
+                'def_tone_bonus': 10,
+                'Trigger_Penalty': 0.5,
                 'kill_bonus': 1000,
                 'terminal_penalty': 500,
-                'mode': 'TANGENT',
+                'tan_parameter':3 # linear for tan_parameter=5, sparse for tan_parameter=2
             },
             4: {
                 'GFW': 0.3,   # Flight Reward Weight
                 'PW': 0.7,    # Pursuit Reward Weight
                 'CW': 0.7,
                 'PW': 0.3,
-                'AoA_W': 1.0,
-                'Sideslip_W': 0.0,
-                'Speed_W': 0.0,
-                'Altitude_W': 0.0,
-                'Critical_AoA': 30,
-                'Terminal_AoA': 60,
-                'Critical_Sideslip': 30,
-                'Terminal_Sideslip': 60,
-                'Critical_Speed': 150.0,
-                'Terminal_Speed': 80.0,
-                'Critical_Altitude': 3500.0,
-                'optimal_zone_width': 1000,
-                'att_tone_bonus': 10.0,
-                'def_tone_bonus': 2,
-                'Trigger_Penalty': 0.3,
-                'kill_bonus': 1000,
-                'terminal_penalty': 500,
-                'mode': 'TANGENT',
-            },
-            5: {
-                'GFW': 0.3,   # Flight Reward Weight
-                'PW': 0.7,    # Pursuit Reward Weight
-                'CW': 0.7,
-                'PW': 0.3,
                 'AoA_W': 0.0,
                 'Sideslip_W': 0.0,
-                'Speed_W': 1.0,
-                'Altitude_W': 0.0,
+                'Speed_W': 0.5,
+                'Altitude_W': 0.5,
                 'Critical_AoA': 30,
                 'Terminal_AoA': 60,
                 'Critical_Sideslip': 30,
@@ -153,36 +129,12 @@
                 'Terminal_Speed': 80.0,
                 'Critical_Altitude': 3500.0,
                 'optimal_zone_width': 1000,
-                'att_tone_bonus': 10.0,
-                'def_tone_bonus': 2,
-                'Trigger_Penalty': 0.3,
+                'att_tone_bonus': 20.0,
+                'def_tone_bonus': 10,
+                'Trigger_Penalty': 0.5,
                 'kill_bonus': 1000,
                 'terminal_penalty': 500,
-                'mode': 'TANGENT',
-            },
-            6: {
-                'GFW': 0.3,   # Flight Reward Weight
-                'PW': 0.7,    # Pursuit Reward Weight
-                'CW': 0.7,
-                'PW': 0.3,
-                'AoA_W': 0.25,
-                'Sideslip_W': 0.25,
-                'Speed_W': 0.25,
-                'Altitude_W': 0.25,
-                'Critical_AoA': 30,
-                'Terminal_AoA': 60,
-                'Critical_Sideslip': 30,
-                'Terminal_Sideslip': 60,
-                'Critical_Speed': 150.0,
-                'Terminal_Speed': 80.0,
-                'Critical_Altitude': 3500.0,
-                'optimal_zone_width': 1000,
-                'att_tone_bonus': 10.0,
-                'def_tone_bonus': 2,
-                'Trigger_Penalty': 0.3,
-                'kill_bonus': 1000,
-                'terminal_penalty': 500,
-                'mode': 'TANGENT',
+                'tan_parameter':5 # linear for tan_parameter=5, sparse for tan_parameter=2
             },
         }
     },
@@ -251,10 +203,10 @@
 
        'max_thrust': 80000,
        "gains": {
-          "AoA": {"kp": 1.2, "ki": 0.5, "kd": 0.4},  #1.2, 0.5, 0.4
-          "sideslip": {"kp": 5, "ki": 0, "kd": 1}, #2, 0, 1
-          "roll": {"kp": 3, "ki": 0, "kd": 1.2}, # 1, 0, 0.5
-          "speed": {"kp": 25, "ki": 0, "kd": 0},
+            'AoA':      {'kp': 5, 'ki': 0.1, 'kd': 0.8},   # Angle of Attack control
+            'sideslip': {'kp': 5, 'ki': 0.1, 'kd': 1.2},   # Lateral balance / sideslip
+            'roll':     {'kp': 5, 'ki': 0.1, 'kd': 1.0},   # Roll angle control
+            'speed':    {'kp': 80, 'ki': 0.8, 'kd': 0.0}   # Throttle/speed regulation
         },
         'rate_limits': {
           'elevator': 20,

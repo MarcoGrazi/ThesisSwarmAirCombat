@@ -2,11 +2,11 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 def logistic(x, alpha=10, midpoint=0.1):
-    return 1-np.atan(np.deg2rad(abs(x)/3)) / np.atan(np.deg2rad(2000))
+    return np.tan(x*(np.pi/3)) / np.tan((np.pi/3))
 
 
 # Extended X-axis range
-x = np.linspace(-3000, 3000, 700)
+x = np.linspace(-1, 1, 700)
 y = logistic(x, alpha=8, midpoint=0.45)
 plt.figure(figsize=(8, 5))
 plt.plot(x, y, label='Sigmoid Curve', color='blue')
