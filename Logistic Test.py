@@ -2,7 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 def logistic(x, alpha=10, midpoint=0.1):
-    return np.tan(x*(np.pi/3)) / np.tan((np.pi/3))
+    return np.tan(x*(np.pi/2.5)) / np.tan((np.pi/2.5))
 
 
 # Extended X-axis range

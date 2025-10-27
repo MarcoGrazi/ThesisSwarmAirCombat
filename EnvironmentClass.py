@@ -1290,7 +1290,7 @@ class AerialBattle(MultiAgentEnv):
             track_angle, adverse_angle = self.get_track_adverse_angles_norm(att_aircraft, def_aircraft)
 
             att_angle_margin = (np.deg2rad(attack_cone[0]/2)-(np.pi*track_angle)) / np.deg2rad(attack_cone[0]/2)
-            def_angle_margin = (adverse_angle*np.pi)-(np.deg2rad(defence_cone[0]/2)) / np.deg2rad(defence_cone[0]/2)
+            def_angle_margin = 0.3 + 0.8 * (adverse_angle-(np.pi-np.deg2rad(defence_cone[0]/2))) / np.deg2rad(defence_cone[0]/2)
             bernoulli_threshold = att_angle_margin * def_angle_margin * tone
 
         # === Sample a Bernoulli trial ===
@@ -1403,27 +1403,27 @@ class AerialBattle(MultiAgentEnv):
             closure = self.get_closure_rate_norm(aircraft, closest_enemy_plane)
             optimal_zone_width = reward_config['optimal_zone_width']
 
-            Angle_advantage = (abs(adverse_angle)-abs(track_angle))
-
-            Closure_Mix = (closure * (1-abs(track_angle)))
-
             TPAR = reward_config['tan_parameter']
-            reward_Pursuit['Pursuit'] = reward_config['PW'] * np.tan(Angle_advantage*(np.pi/TPAR)) / np.tan((np.pi/TPAR))
-            reward_Pursuit['Closure'] = reward_config['CW'] * np.tan(Closure_Mix*(np.pi/TPAR)) / np.tan((np.pi/TPAR))
+            angle_advantage = adverse_angle - track_angle
 
-            #Sparse Pursuit Rewards:
-            sparse_reward['Attack_Tone'] = reward_config['att_tone_bonus'] * missile_tone_attack * abs(adverse_angle)
+            # Pursuit_angle
+            shaped_pursuit = np.tan((angle_advantage)*(np.pi/TPAR)) / np.tan(np.pi/TPAR)
+            reward_Pursuit['Pursuit'] = shaped_pursuit * reward_config['AW']
+
+            # Closure subject to minimum distance and adverse angle tuning
+            closure_dist_norm = (1+closure) * (angle_advantage)
+            reward_Pursuit['Closure'] = closure_dist_norm * reward_config['CW']
+
+            sparse_reward['Attack'] = reward_config['att_tone_bonus'] * missile_tone_attack * track_angle
             if missile_target != 'none':
                 self.attack_metric += 1
-            sparse_reward['Defence_Tone'] = - reward_config['def_tone_bonus'] * missile_tone_defence * abs(track_angle)
-
-            sparse_reward['Trigger'] = - reward_config['Trigger_Penalty'] * (max(missile_tone_attack-self.tone_threshold, 0) + 0.5) * (trigger-self.trigger_threshold)
+            sparse_reward['Defence'] = - reward_config['def_tone_bonus'] * missile_tone_defence * adverse_angle
 
         else:
             reward_Pursuit['Pursuit'] = 0
             reward_Pursuit['Closure'] = 0
-            sparse_reward['Attack_Tone'] = 0
-            sparse_reward['Defence_Tone'] = 0
+            sparse_reward['Attack'] = 0
+            sparse_reward['Defence'] = 0
         
         if kill != 'none':
             sparse_reward['Kill'] = reward_config['kill_bonus']
@@ -1451,13 +1451,13 @@ class AerialBattle(MultiAgentEnv):
 
         Total_Reward.update(reward_Flight)
         Total_Reward.update(reward_Pursuit)
-        Total_Reward['Attack_Tone'] = sparse_reward['Attack_Tone']
-        Total_Reward['Defence_Tone'] = sparse_reward['Defence_Tone']
+        Total_Reward['Attack'] = sparse_reward['Attack']
+        Total_Reward['Defence'] = sparse_reward['Defence']
         
         #print(normalized_total_reward)
         self.episode_rewards[self.possible_agents[agent_index]].append(Total_Reward.copy())
         return normalized_total_reward, terminated, truncated
-
+    
     def CLI_report(self, telemetry, action):
         """
         Print a human-readable report of the latest aircraft telemetry and control action.
@@ -2169,9 +2169,9 @@ def Test_env():
     a = 0  # Action index pointer
 
     # Run simulation for 20 steps per predefined action set
-    for step in range(len(predefined_actions) * 150):
+    for step in range(len(predefined_actions) * 50):
         # Update the action index every 50 steps
-        if step % 150 == 0 and step != 0:
+        if step % 50 == 0 and step != 0:
             a += 1
 
         # Build action dictionary for alive agents

@@ -459,11 +459,13 @@ def name_creator(trial):
            f"{trial.config['replay_buffer_config']['capacity']}"
     return name
 
+
+
 # === Algorithm Configuration ===
 algo_config = (
     SACConfig()
     .api_stack(enable_rl_module_and_learner=False, enable_env_runner_and_connector_v2=False)
-    .environment(env="aerial_battle", env_config={'reward_version': tune.grid_search([1,2,3,4])})
+    .environment(env="aerial_battle", env_config={'reward_version': list(env_config['reward_versions'].keys())})
     .training(
         train_batch_size=tune.grid_search(alg_config['batch_size_per_learner']),
         gamma=tune.grid_search(alg_config['gamma']),
