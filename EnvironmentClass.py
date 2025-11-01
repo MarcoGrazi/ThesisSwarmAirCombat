@@ -328,7 +328,7 @@ class Aircraft:
             'elevator': -np.clip(outputs['AoA'] / 40, -1, 1),           # Inverted due to control surface direction
             'rudder': -np.clip(outputs['sideslip'] / 40, -1, 1),
             'aileron': np.clip(outputs['roll'] / 40, -1, 1),
-            'throttle': np.clip(outputs['speed'] / 343, 0.0, 1.0)
+            'throttle': np.clip(outputs['speed'] / 343, -1, 1)
         }
 
         # Apply per-surface rate limits
@@ -341,7 +341,7 @@ class Aircraft:
         commands['elevator'] = float(np.clip(commands['elevator'], -1.0, 1.0))
         commands['aileron']  = float(np.clip(commands['aileron'],  -1.0, 1.0))
         commands['rudder']   = float(np.clip(commands['rudder'],   -1.0, 1.0))
-        commands['throttle'] = float(np.clip(commands['throttle'],  0.0, 1.0))
+        commands['throttle'] = float(np.clip(commands['throttle'],  -1, 1))
 
         return commands['throttle'], commands['elevator'], commands['aileron'], commands['rudder']
 
@@ -1289,8 +1289,8 @@ class AerialBattle(MultiAgentEnv):
             _, defence_cone = def_aircraft.get_cones()
             track_angle, adverse_angle = self.get_track_adverse_angles_norm(att_aircraft, def_aircraft)
 
-            att_angle_margin = 0.5 + 0.5 * (np.deg2rad(attack_cone[0]/2)-(np.pi*track_angle)) / np.deg2rad(attack_cone[0]/2)
-            def_angle_margin = 0.5 + 0.5 * (adverse_angle-(np.pi-np.deg2rad(defence_cone[0]/2))) / np.deg2rad(defence_cone[0]/2)
+            att_angle_margin = 0.4 + 0.6 * (np.deg2rad(attack_cone[0]/2)-(np.pi*track_angle)) / np.deg2rad(attack_cone[0]/2)
+            def_angle_margin = 0.4 + 0.6 * (adverse_angle-(np.pi-np.deg2rad(defence_cone[0]/2))) / np.deg2rad(defence_cone[0]/2)
             bernoulli_threshold = att_angle_margin * def_angle_margin * tone
 
         # === Sample a Bernoulli trial ===
@@ -1384,6 +1384,14 @@ class AerialBattle(MultiAgentEnv):
         Altitude_ALPHA = 12
         reward_Flight['Altitude'] = - reward_config['Altitude_W'] * (1 / (1 + np.exp(-Altitude_ALPHA * (Altitude_Norm - Altitude_MID))))
 
+        #Smoothing commands penalty
+        UpAngleDelta = abs(UpAngle_C-pre_UpAngle_C)
+        SideAngleDelta = abs(SideAngle_C-pre_SideAngle_C)
+        CombinedNorm = (UpAngleDelta + SideAngleDelta) / 2
+        Delta_MID = reward_config['Critical_Delta']
+        Delta_ALPHA = 12
+        reward_Flight['Smoothing'] = - reward_config['Smoothing_W'] * (1 / (1 + np.exp(-Delta_ALPHA * (CombinedNorm - Delta_MID))))
+
         #### Pursuit related Rewards ####
         # Choose Enemy Plane
         closest_enemy_plane = None
@@ -1400,8 +1408,8 @@ class AerialBattle(MultiAgentEnv):
             track_angle, adverse_angle = self.get_track_adverse_angles_norm(aircraft, closest_enemy_plane)
             closure = self.get_closure_rate_norm(aircraft, closest_enemy_plane)
             _, def_cone = closest_enemy_plane.get_cones()
-            optimal_distance = (def_cone[1]+def_cone[2]) / 2
-            optimal_zone_width = reward_config['optimal_zone_width']
+            optimal_zone = reward_config['optimal_zone']
+            optimal_distance = (def_cone[1] + def_cone[2])/2
 
             TPAR = reward_config['tan_parameter']
             angle_advantage = adverse_angle - track_angle
@@ -1411,11 +1419,18 @@ class AerialBattle(MultiAgentEnv):
             reward_Pursuit['Pursuit'] = shaped_pursuit * reward_config['AW']
 
             # Closure subject to minimum distance and adverse angle tuning
+            smooth_weights = [
+                np.clip((dist-optimal_distance)/(def_cone[2]-optimal_distance), 0, 1),
+                np.clip((optimal_distance-dist)/(optimal_distance-def_cone[1]), 0, 1),
+                1 - np.clip(abs(abs(optimal_distance-dist)-optimal_zone)/optimal_zone, 0, 1)
+            ]
+
             closure_dist_norm = (
-                (dist > def_cone[2]) * (1+closure) * (angle_advantage) +
-                (dist < def_cone[1]) * (-closure) +
-                (abs(dist-optimal_distance)<optimal_zone_width) * (1-abs(closure))
+                smooth_weights[0] * (closure) * (1-track_angle) +
+                smooth_weights[1] * (-closure) +
+                smooth_weights[2] * (1-abs(closure))
                 )
+            
             reward_Pursuit['Closure'] = closure_dist_norm * reward_config['CW']
 
             sparse_reward['Attack'] = reward_config['att_tone_bonus'] * missile_tone_attack * track_angle
@@ -2163,8 +2178,8 @@ def Test_env():
     # Define fixed actions per agent for evaluation
     # Format: [Up_Angle, Side_Angle, Speed, Fire], all normalized in body frame
     predefined_actions = [
-        [0.005, 0.1, 1, 0],
-        [0.005, 0.1, 1, 0],
+        [0.0, 0, 1, 0],
+        [0.0, 0, 1, 0],
         [0.000, 0, 1, 0],
         [0.000, 0, 1, 0],
         [0.000, 0, 1, 0]

@@ -55,6 +55,8 @@ class FixedWingAircraft:
 
         # Maximum available engine thrust [N]
         self.max_thrust = config['max_thrust']
+        self.aerobrake_CD = config['aerobrake_CD']
+        self.aerobrake_surface = config['aerobrake_surface']
 
         # Stall flag (to be triggered during AoA evaluation)
         self.stall = False
@@ -293,10 +295,11 @@ class FixedWingAircraft:
             AoA:       Angle of attack [rad or deg] (for telemetry)
             sideslip:  Sideslip angle [rad or deg] (for telemetry)
         """
+        aerobrake_deploy = abs(min(throttle, 0))
 
         # === Aerodynamic forces and moments from control surfaces ===
         F_aero, M_aero, AoA, sideslip = self.compute_aero_forces_and_moment(
-            elevon_angle, aleiron_angle, rudder_angle
+            elevon_angle, aleiron_angle, rudder_angle, aerobrake_deploy
         )
 
         # === Gravitational force in body frame ===
@@ -307,8 +310,6 @@ class FixedWingAircraft:
         # === Engine thrust force ===
         # Acts along the positive X-axis of the body frame
         F_thrust = np.array([self.max_thrust * throttle, 0.0, 0.0])
-        if F_thrust <= 0.1:
-            F_thrust = np.array([-self.max_thrust*0.3, 0, 0])
 
         # === Total external force and moment in body frame ===
         force = F_thrust + F_weight + F_aero
@@ -316,7 +317,7 @@ class FixedWingAircraft:
 
         return force, moment, AoA, sideslip
 
-    def compute_aero_forces_and_moment(self, elevon_angle, aleiron_angle, rudder_angle):
+    def compute_aero_forces_and_moment(self, elevon_angle, aleiron_angle, rudder_angle, aerobrake_deploy):
         """
         Compute aerodynamic forces and moments in the body frame based on current flight condition
         and control surface deflections.
@@ -367,8 +368,10 @@ class FixedWingAircraft:
         f_aleirons_body = R_w2b @ f_aleirons_wind
         f_rudders_body = R_w2b @ f_rudders_wind
 
+        f_aerobrake = self.Aerobrake(aerobrake_deploy, V)
+
         # === Total aerodynamic force (body frame) ===
-        F_aero = f_airframe_body + f_elevons_body + f_aleirons_body + f_rudders_body
+        F_aero = f_airframe_body + f_elevons_body + f_aleirons_body + f_rudders_body + f_aerobrake
 
         # === Aerodynamic moments (body frame) ===
         # Moments from aerodynamic force offset from CG
@@ -539,6 +542,15 @@ class FixedWingAircraft:
             -lateral,  # -Y_w: side force opposes yaw (standard sign convention)
             -lift      # -Z_w: 0 here
         ])
+    
+    def Aerobrake(self, V, deploy):
+        # === Dynamic pressure ===
+        q = 0.5 * self.rho * V**2
+        CD = self.aerobrake_CD * deploy
+
+        drag = CD * q * self.aerobrake_surface
+
+        return np.array([-drag, 0, 0])
 
     def body_to_vehicle(self, roll, pitch, yaw):
         """
