@@ -2,7 +2,7 @@
   {
     "WANDB_API_KEY": "1b8b77cc6fc3631890702b9ecbfed2fdc1551347",
     'artifacts_folder': 'Training_Runs',
-    'run_name':'FinalTrain_Pursuit_Shaping_KillTrigger',
+    'run_name':'FinalTrain_Pursuit_C1',
     'base_checkpoint': '',
     'adversary_base_checkpoint': '',
     'base_policy_restore': [],
@@ -23,7 +23,7 @@
     'sample_timeout_s': 120,
     'batch_size_per_learner': [1200],
     'gamma': [0.99],
-    'train_iterations': 15000,
+    'train_iterations': 25000,
     'checkpoint_freq': 1000,
     'checkpoint_length': 3000, #3000/10 = 300/60 = 5 minutes
 },
@@ -47,8 +47,11 @@
       'max_size': 30000,
       'collision_distance': 30,
       'dummy': 'line', # 'line', 'curve', 'none', 'mixed', 'random'
-      'dummy_turn_radius':5000,
-      'dummy_direction':1,
+      'change_speed': False, 
+      'random_change_period_options': [150, 250, 400],
+      'dummy_turn_options': [1000, 2500, 4000, 5000], 
+      'dummy_dir_options': [1, -1],
+      'dummy_speed_options': [0, 10, -10, 20, -20],
       'dummy_kill': False,
       'alive_agents_start': 1,
       'speed_step': 0.01,
@@ -57,7 +60,7 @@
       'screen_size' : [800, 800],
       'spawning_distance': 3000,
       'spawning_orientations': [[0, 10, -10], [0, 90, -90, 180]],
-      'spawning_speeds': [120, 140, 180, 250],
+      'spawning_speeds': [120, 140, 160, 180, 200, 220, 250],
       'reward_versions': {
             1: {
                 'GFW': 0.2,   # Flight Reward Weight

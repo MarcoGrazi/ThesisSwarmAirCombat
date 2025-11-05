@@ -141,7 +141,7 @@ class FixedWingAircraft:
         self.telemetry['moment'].append([0, 0, 0])            # Net torques/moments
         self.telemetry['commands'].append([0, 0, 0, 0])       # Control inputs: [UpAngle, SideAngle, Speed, Fire]
 
-    def dummy_step(self, dummy_type, turn_radius, direction):
+    def dummy_step(self, dummy_type, turn_radius, direction, speed):
         """
         Advance the aircraft one timestep using a simplified (non-physical) motion model.
 
@@ -153,7 +153,7 @@ class FixedWingAircraft:
         if dummy_type == 'line':
             # === Straight line motion ===
             # Moves forward in the direction of current orientation at constant velocity
-
+            self.v = np.array([speed, 0.0, 0.0])
             R = self.body_to_vehicle(self.o[0], self.o[1], self.o[2])  # Rotation matrix: body → world
             self.p = self.p.copy() + (R @ self.v) * self.dt            # Update position using v_b transformed to world frame
 
@@ -161,7 +161,6 @@ class FixedWingAircraft:
             # === Turning motion ===
             # Simplified 2D yaw turn, constant altitude and speed
 
-            speed = np.linalg.norm(self.v)               # Magnitude of velocity vector
             turn_rate = speed / turn_radius              # Yaw rate [rad/s] from speed and radius
 
             self.o[2] += direction * turn_rate * self.dt # Update yaw angle (only heading changes)

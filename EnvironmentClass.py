@@ -69,10 +69,23 @@ class Aircraft:
         self.dummy_type = "none"                    # "none" or dummy behavior name
         self.turn_radius = 0                        # Dummy circular turn radius (if used)
         self.direction = 0                          # Dummy turn direction: +1 or -1
+        self.speed = 0
+        self.change_speed = False
+        self.random_change_period = 250
+        self.random_change_period_options = []
+        self.dummy_turn_options = []
+        self.dummy_dir_options = []
+        self.dummy_speed_options = []
         self.random_dummy_counter = 0
         self.random_dummy_type = "none"
 
-    def set_dummy(self, type, turn_radius='500', direction=1.0):
+    def set_dummy(self,
+                  type,
+                  change_speed = False, 
+                  random_change_period_options = [250], 
+                  dummy_turn_options = [5000], 
+                  dummy_dir_options = [1,-1],
+                  dummy_speed_options = [0]):
         """
         Configure the aircraft as a scripted dummy target for simplified behavior.
 
@@ -82,8 +95,18 @@ class Aircraft:
             direction (float): Turning direction (+1 for clockwise, -1 for counter-clockwise).
         """
         self.dummy_type = type                  # Activate dummy behavior mode
-        self.turn_radius = turn_radius          # Store specified turn radius
-        self.direction = direction              # Direction of turn (clockwise or counter-clockwise)
+        self.change_speed = change_speed
+        self.random_change_period_options = random_change_period_options
+        self.dummy_turn_options = dummy_turn_options
+        self.dummy_dir_options = dummy_dir_options
+        self.dummy_speed_options = dummy_speed_options
+
+        self.turn_radius = np.random.choice(self.dummy_turn_options)
+        self.direction = np.random.choice(self.dummy_dir_options)
+        self.random_change_period = np.random.choice(self.random_change_period_options)
+        self.random_dummy_type = np.random.choice(['line', 'curve'])
+        self.random_dummy_counter = 0
+        
 
     def is_dummy(self):
         """
@@ -108,8 +131,7 @@ class Aircraft:
         # Reset physical model state (position, orientation, velocity, etc.)
         self.physical_model.reset(position, orientation, speed)
 
-        self.random_dummy_counter = 0
-        self.random_dummy_type = np.random.choice(['line', 'curve'])
+        self.speed = speed
 
         # Set aircraft alive status and missile system state
         self.live = alive
@@ -166,18 +188,20 @@ class Aircraft:
 
             elif self.dummy_type=="random":
 
-                self.physical_model.dummy_step(self.random_dummy_type, self.turn_radius, self.direction)
+                self.physical_model.dummy_step(self.random_dummy_type, self.turn_radius, self.direction, self.speed)
                 self.random_dummy_counter += 1
 
-                if self.random_dummy_counter > 250*frequency_factor:
+                if self.random_dummy_counter > self.random_change_period*frequency_factor:
                     self.random_dummy_counter = 0
+                    self.random_change_period = np.random.choice(self.random_change_period_options)
                     self.random_dummy_type = np.random.choice(['line', 'curve'])
-                    self.turn_radius = np.random.choice([2000, 3000, 4000, 5000, 6000])
-                    self.direction = np.random.choice([1, -1])
-
+                    self.turn_radius = np.random.choice(self.dummy_turn_options)
+                    self.direction = np.random.choice(self.dummy_dir_options)
+                    if self.change_speed:
+                        self.speed = np.clip(self.speed + np.random.choice(self.dummy_speed_options), 100, 343)
             else:
                 # Dummy aircraft follows a scripted path (e.g., constant turn radius)
-                self.physical_model.dummy_step(self.dummy_type, self.turn_radius, self.direction)
+                self.physical_model.dummy_step(self.dummy_type, self.turn_radius, self.direction, self.speed)
 
         # --- Log updated telemetry after the control step ---
         for key in self.agent_telemetry.keys():
@@ -550,8 +574,11 @@ class AerialBattle(MultiAgentEnv):
 
         # === Dummy Flight Mode Parameters (for scripted behavior or non-learning actors) ===
         self.dummy = env_config["dummy"]
-        self.turn_radius = env_config["dummy_turn_radius"]
-        self.direction = env_config["dummy_direction"]
+        self.change_speed = env_config['change_speed']
+        self.random_change_period_options = env_config['random_change_period_options'] 
+        self.dummy_turn_options = env_config['dummy_turn_options']
+        self.dummy_dir_options = env_config['dummy_dir_options']
+        self.dummy_speed_options = env_config['dummy_speed_options']
         self.dummy_kill = env_config['dummy_kill']
 
         # === Tracking + Stats ===
@@ -755,10 +782,16 @@ class AerialBattle(MultiAgentEnv):
             aircraft = self.Aircrafts[index]
 
             self.init_airplane(aircraft, alive=True, testing=testing, team=t)
+
             dummy_type = self.dummy
             if dummy_type == 'mixed':
                 dummy_type = np.random.choice(['line', 'curve'])
-            aircraft.set_dummy(dummy_type, self.turn_radius, self.direction)
+            aircraft.set_dummy(dummy_type, 
+                               self.change_speed, 
+                               self.random_change_period_options, 
+                               self.dummy_turn_options, 
+                               self.dummy_dir_options, 
+                               self.dummy_speed_options)
 
         # === Return initial observation and info ===
         return self.get_obs(), {'__common__': {'attack_steps' : self.attack_metric, 'kills': self.kill_metric}}
@@ -2173,8 +2206,7 @@ def Test_env():
     images = []
 
     # Reset the environment and get initial observations
-    for i in range(100):
-        env.reset()
+    env.reset()
 
     observations = env.reset()
     images.append(env.render())  # Render the initial state
