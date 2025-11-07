@@ -391,13 +391,14 @@ class CallbacksBroker(DefaultCallbacks):
             print("\n++++++++++++++++++++++ Checkpoint Loaded +++++++++++++++++++++\n")
 
         elif Base_Checkpoint:
-            print("\n++++++++++++++++++++++ Loading Checkpoint +++++++++++++++++++++\n")
-            checkpoint_path = os.path.join(storage_path, RunName, Base_Checkpoint)
-            restored = algorithm.get_policy(id).from_checkpoint(checkpoint_path)['team_0']
-            weights = restored.get_weights()
-            algorithm.get_policy(id).set_weights(weights)
-            print(f"Loaded policy {id}")
-            print("\n++++++++++++++++++++++ Checkpoint Loaded +++++++++++++++++++++\n")
+            for id in Base_Policy_restore:
+                print("\n++++++++++++++++++++++ Loading Checkpoint +++++++++++++++++++++\n")
+                checkpoint_path = os.path.join(storage_path, RunName, Base_Checkpoint)
+                restored = algorithm.get_policy(id).from_checkpoint(checkpoint_path)['team_0']
+                weights = restored.get_weights()
+                algorithm.get_policy(id).set_weights(weights)
+                print(f"Loaded policy {id}")
+                print("\n++++++++++++++++++++++ Checkpoint Loaded +++++++++++++++++++++\n")
 
     def on_train_result(self, *, algorithm, result, **kwargs):
         if Adversary_Base_Checkpoint:

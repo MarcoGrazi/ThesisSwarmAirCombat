@@ -1323,8 +1323,7 @@ class AerialBattle(MultiAgentEnv):
             track_angle, adverse_angle = self.get_track_adverse_angles_norm(att_aircraft, def_aircraft)
 
             att_angle_margin = 0.2 + 0.8 * (np.deg2rad(attack_cone[0]/2)-(np.pi*track_angle)) / np.deg2rad(attack_cone[0]/2)
-            def_angle_margin = 0.7 + 0.3 * (adverse_angle-(np.pi-np.deg2rad(defence_cone[0]/2))) / np.deg2rad(defence_cone[0]/2)
-            bernoulli_threshold = att_angle_margin * def_angle_margin * tone
+            bernoulli_threshold = att_angle_margin * tone
 
         # === Sample a Bernoulli trial ===
         sample = np.random.uniform(0.0, 1.0)
