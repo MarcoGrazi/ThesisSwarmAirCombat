@@ -2218,6 +2218,7 @@ def Test_env():
     # Initialize list to collect rendered frames
     images = []
 
+    env.set_plane_model(0, 5)
     # Reset the environment and get initial observations
     env.reset()
 
@@ -2227,11 +2228,11 @@ def Test_env():
     # Define fixed actions per agent for evaluation
     # Format: [Up_Angle, Side_Angle, Speed, Fire], all normalized in body frame
     predefined_actions = [
-        [0.0, 0, 1, 0],
-        [0, -0.5, 1, 0],
-        [0.000, 0, 1, 0],
-        [0.000, 0, 1, 0],
-        [0.000, 0, 1, 0]
+        [0, 0, 1, 0],
+        [0, 0.5, 1, 0],
+        [0, 0, 1, 0],
+        [0, 0, 1, 0],
+        [0, 0, 1, 0]
     ]
 
     a = 0  # Action index pointer
@@ -2273,5 +2274,5 @@ def Test_env():
     # Clean up environment (if needed)
     env.close()
 
-#Test_env()
+Test_env()
 

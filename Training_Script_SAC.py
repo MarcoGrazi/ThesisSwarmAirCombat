@@ -427,6 +427,9 @@ class CustomWandbCallback(DefaultCallbacks):
             if v is not None and not (isinstance(v, float) and math.isnan(v))
         }
 
+        # -------- Log scalar metrics -------- 
+        wandb.log(metrics, step=step)
+
 # Broker to combine multiple callbacks and restore from a base checkpoint
 class CallbacksBroker(DefaultCallbacks):
     def __init__(self):
@@ -485,7 +488,9 @@ class CallbacksBroker(DefaultCallbacks):
             Checkpoints, Current_Match, Ratings = self.EvaluationCallback.on_train_result(algorithm=algorithm, result=result, **kwargs)
             self.WandbCallBack.on_train_result_SelfPlay(algorithm=algorithm, result=result, Ratings=Ratings,
                                             Current_Match=Current_Match, **kwargs)
-            Match_History.append(Current_Match.copy())
+            
+            if algorithm.iteration % alg_config['checkpoint_freq'] == 0:
+                Match_History.append(Current_Match.copy())
             
             if algorithm.iteration == alg_config['train_iterations']:
                 plot_and_save_matching_history(Match_History, Ratings, save_dir=os.path.join(storage_path, RunName, "PLOTS"))

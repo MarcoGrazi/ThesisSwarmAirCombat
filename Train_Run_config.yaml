@@ -3,7 +3,7 @@
     "WANDB_API_KEY": "1b8b77cc6fc3631890702b9ecbfed2fdc1551347",
     'artifacts_folder': 'Training_Runs',
     'run_name':'FinalTrain_SelfPlay_1',
-    'initial_checkpoints': ['Best_C04/team_0/0', 'Best_C14/team_0/1'],  
+    'initial_checkpoints': ['Best_C04/team_0/0', 'Best_C14/team_0/1', 'Best_C04/team_0/2', 'Best_C14/team_0/3', 'Best_C04/team_0/4', 'Best_C14/team_0/5'],  
     'policies_to_train': ['team_1'],
     'fcnet_hiddens': [256],
     'fcnet_activation': ['relu'],
@@ -168,7 +168,7 @@
         }
   },
 
-    1: # UAV Model 1
+  1: # UAV Model 1
        {
        'mass': 6000,
        'max_speed':343, #speed of sound (after this the aero model is not realistic anymore)
@@ -241,6 +241,310 @@
           'rudder': 20,
           'throttle': 20,
         }
-    }
+  },
+
+  2:  # UAV Model 2 (derived from Model 0) # shorter wingspan, less mass and inertia
+       {
+       'mass': 4000, #-1000
+       'max_speed':343, #speed of sound (after this the aero model is not realistic anymore)
+       'max_acc': 20,
+       'max_thrust': 60000,
+       'attack_cone': [120, 1000, 5000],
+       'defence_cone': [200, 1000, 5000],
+       'bounding_box': [9.4, 8, 1.4],
+       'inertia_tensor':
+         [ [5.8e3, 0, 0 ], # -1
+           [0, 3e4, 0],  #-0,5
+           [0, 0, 3.5e4]], #-0.6
+         #[[6.817e3,1.924e-1, 1.671e2],
+         # [1.924e-1,3,551e4,4.791e2],
+         # [1.671e2,-2.288e-3,4.151e4]],
+
+       'aerobrake_CD': 0.4,
+       'aerobrake_surface': 3,
+       'airframe':
+         {
+           'coefficients':
+             {
+               'front' : {
+                           'lift': [-0.0000033911279, -0.0000178357992, 0.0128228674137, 0.031668845813],
+                           'drag': [0.0001452967676, 0.0000783996205, 0.01],
+               },
+               'side': {
+                         'lateral':[-0.0000003732703, 0, 0.001555689069, 0],
+                         'drag':[0.0000164511278, 0, 0.0208105263158],
+               },
+             },
+           'COF' : [-0.3, 0, 0],
+           'surface': 75,
+       },
+
+       'aleiron':
+         {
+           'coefficients': {
+             'lift': [ 0.5, 0],
+             'drag': [ 0.0000001361, 0.000056624, -0.0004479701, 0.01 ],
+           },
+           'COF': [ -2, 3, 0 ],
+           'surface': 2,
+         },
+
+       'elevons': {
+         'coefficients': {
+           'lift': [0.6, 0],
+           'drag': [0.0002803707, 0.0002215203, 0.01],
+         },
+         'COF': [-3.65,0,0],
+         'surface':  6,
+       },
+
+       'rudders': {
+         'coefficients': {
+           'lateral': [0.2, 0],
+           'drag': [-0.0001966466, 0, 0.01],
+         },
+         'COF': [ -3, 0, 0 ],
+         'surface': 4,
+        },
+       "gains": {
+            'AoA':      {'kp': 1, 'ki': 0, 'kd': 0.4},   # Angle of Attack control
+            'sideslip': {'kp': 5, 'ki': 0.1, 'kd': 1.2},   # Lateral balance / sideslip
+            'roll':     {'kp': 5, 'ki': 0.1, 'kd': 1.0},   # Roll angle control
+            'speed':    {'kp': 20, 'ki': 0.8, 'kd': 0.0}   # Throttle/speed regulation
+        },
+        'rate_limits': {
+          'elevator': 20,
+          'aileron': 20,
+          'rudder': 20,
+          'throttle': 20,
+        }
+  },
+
+  3: # UAV Model 3 (derived from Model 1) # faster response PID, shorter wingspan with less inertia and mass
+       {
+       'mass': 5000, # -1000
+       'max_speed':343, #speed of sound (after this the aero model is not realistic anymore)
+       'max_acc': 20,
+       'max_thrust': 120000,
+       'attack_cone': [120, 1000, 5000],
+       'defence_cone': [200, 1000, 5000],
+       'bounding_box': [8.1, 6.3, 1.6],
+       'inertia_tensor':
+         [ [1.5e4, 0, 0 ], # -0.4
+           [0, 1.5e4, 0], # -0.4
+           [0, 0, 1.7e4]], # -0.5
+
+       'aerobrake_CD': 0.4,
+       'aerobrake_surface': 3,
+       'airframe':
+         {
+           'coefficients':
+             {
+               'front' : {
+                           'lift': [0.0000000256139, -0.0000046341745, -0.000085684744, 0.0234959244665, 0.0369768735596],
+                           'drag': [-0.00000000754,-0.0000003855746, 0.0001404192042, 0.0011983067446, 0.0051677757234],
+               },
+               'side': {
+                         'lateral':[-0.00000037, 0.0025],
+                         'drag':[0.0000164511278, 0, 0.0208105263158],
+               },
+             },
+           'COF' : [-0.05, 0, 0],
+           'surface': 100, # -18
+
+       },
+
+       'aleiron':
+         {
+           'coefficients': {
+             'lift': [ 0.6, 0],
+             'drag': [ 0.0000001361, 0.000056624, -0.0004479701, 0.01 ],
+           },
+           'COF': [ 2, 1.5, 0 ],
+           'surface': 5,
+         },
+
+       'elevons': {
+         'coefficients': {
+           'lift': [0.6, 0],
+           'drag': [0.0002803707, 0.0002215203, 0.01],
+         },
+         'COF': [2,0,0],
+         'surface':  -5,
+       },
+
+       'rudders': {
+         'coefficients': {
+           'lateral': [0.2, 0],
+           'drag': [-0.0001966466, 0, 0.01],
+         },
+         'COF': [ -2.5, 0, 0 ],
+         'surface': 5,
+        },
+       "gains": {
+            'AoA':      {'kp': 0.8, 'ki': 0, 'kd': 0.3},   # Angle of Attack control #modified for faster control in relation to Model 1
+            'sideslip': {'kp': 3, 'ki': 0.1, 'kd': 0.8},   # Lateral balance / sideslip
+            'roll':     {'kp': 3, 'ki': 0.1, 'kd': 0.8},   # Roll angle control
+            'speed':    {'kp': 20, 'ki': 0.8, 'kd': 0.0}   # Throttle/speed regulation
+        },
+        'rate_limits': {
+          'elevator': 20,
+          'aileron': 20,
+          'rudder': 20,
+          'throttle': 20,
+        }
+  },
+
+  4:  # UAV Model 4 (derived from Model 0) # higher thrust-to-weight ratio and lower vulnerability
+       {
+       'mass': 5000,
+       'max_speed':343, #speed of sound (after this the aero model is not realistic anymore)
+       'max_acc': 20,
+       'max_thrust': 80000, # +20000
+       'attack_cone': [120, 1000, 5000],
+       'defence_cone': [140, 1000, 5000], # engine shrouds for lower vulnerable angle
+       'bounding_box': [9.4, 8, 1.4],
+       'inertia_tensor':
+         [ [6.817e3, 0, 0 ],
+           [0, 3.551e4, 0],
+           [0, 0, 4.151e4]],
+         #[[6.817e3,1.924e-1, 1.671e2],
+         # [1.924e-1,3,551e4,4.791e2],
+         # [1.671e2,-2.288e-3,4.151e4]],
+
+       'aerobrake_CD': 0.4,
+       'aerobrake_surface': 3,
+       'airframe':
+         {
+           'coefficients':
+             {
+               'front' : {
+                           'lift': [-0.0000033911279, -0.0000178357992, 0.0128228674137, 0.031668845813],
+                           'drag': [0.0001452967676, 0.0000783996205, 0.01],
+               },
+               'side': {
+                         'lateral':[-0.0000003732703, 0, 0.001555689069, 0],
+                         'drag':[0.0000164511278, 0, 0.0208105263158],
+               },
+             },
+           'COF' : [-0.3, 0, 0],
+           'surface': 88.58,
+       },
+
+       'aleiron':
+         {
+           'coefficients': {
+             'lift': [ 0.5, 0],
+             'drag': [ 0.0000001361, 0.000056624, -0.0004479701, 0.01 ],
+           },
+           'COF': [ -2, 3, 0 ],
+           'surface': 2,
+         },
+
+       'elevons': {
+         'coefficients': {
+           'lift': [0.6, 0],
+           'drag': [0.0002803707, 0.0002215203, 0.01],
+         },
+         'COF': [-3.65,0,0],
+         'surface':  6,
+       },
+
+       'rudders': {
+         'coefficients': {
+           'lateral': [0.2, 0],
+           'drag': [-0.0001966466, 0, 0.01],
+         },
+         'COF': [ -3, 0, 0 ],
+         'surface': 4,
+        },
+       "gains": {
+            'AoA':      {'kp': 1.2, 'ki': 0, 'kd': 0.8},   # Angle of Attack control
+            'sideslip': {'kp': 5, 'ki': 0.1, 'kd': 1.2},   # Lateral balance / sideslip
+            'roll':     {'kp': 5, 'ki': 0.1, 'kd': 1.0},   # Roll angle control
+            'speed':    {'kp': 20, 'ki': 0.8, 'kd': 0.0}   # Throttle/speed regulation
+        },
+        'rate_limits': {
+          'elevator': 20,
+          'aileron': 20,
+          'rudder': 20,
+          'throttle': 20,
+        }
+  },
+
+  5: # UAV Model 5 (derived from Model 1) # higher thrust-to-weight ratio and lower vulnerability
+       {
+       'mass': 6000,
+       'max_speed':343, #speed of sound (after this the aero model is not realistic anymore)
+       'max_acc': 20,
+       'max_thrust': 140000, # +20000
+       'attack_cone': [120, 1000, 5000],
+       'defence_cone': [140, 1000, 5000], # engine shrouds for lower vulnerable angle
+       'bounding_box': [8.1, 6.3, 1.6],
+       'inertia_tensor':
+         [ [1.9e4, 0, 0 ],
+           [0, 1.9e4, 0],
+           [0, 0, 2.2e4]],
+
+       'aerobrake_CD': 0.4,
+       'aerobrake_surface': 3,
+       'airframe':
+         {
+           'coefficients':
+             {
+               'front' : {
+                           'lift': [0.0000000256139, -0.0000046341745, -0.000085684744, 0.0234959244665, 0.0369768735596],
+                           'drag': [-0.00000000754,-0.0000003855746, 0.0001404192042, 0.0011983067446, 0.0051677757234],
+               },
+               'side': {
+                         'lateral':[-0.00000037, 0.0025],
+                         'drag':[0.0000164511278, 0, 0.0208105263158],
+               },
+             },
+           'COF' : [-0.05, 0, 0],
+           'surface': 118,
+
+       },
+
+       'aleiron':
+         {
+           'coefficients': {
+             'lift': [ 0.6, 0],
+             'drag': [ 0.0000001361, 0.000056624, -0.0004479701, 0.01 ],
+           },
+           'COF': [ 2, 1.5, 0 ],
+           'surface': 5,
+         },
+
+       'elevons': {
+         'coefficients': {
+           'lift': [0.6, 0],
+           'drag': [0.0002803707, 0.0002215203, 0.01],
+         },
+         'COF': [2,0,0],
+         'surface':  -5,
+       },
+
+       'rudders': {
+         'coefficients': {
+           'lateral': [0.2, 0],
+           'drag': [-0.0001966466, 0, 0.01],
+         },
+         'COF': [ -2.5, 0, 0 ],
+         'surface': 5,
+        },
+       "gains": {
+            'AoA':      {'kp': 1.2, 'ki': 0, 'kd': 0.8},   # Angle of Attack control
+            'sideslip': {'kp': 3, 'ki': 0.1, 'kd': 0.8},   # Lateral balance / sideslip
+            'roll':     {'kp': 3, 'ki': 0.1, 'kd': 0.8},   # Roll angle control
+            'speed':    {'kp': 20, 'ki': 0.8, 'kd': 0.0}   # Throttle/speed regulation
+        },
+        'rate_limits': {
+          'elevator': 20,
+          'aileron': 20,
+          'rudder': 20,
+          'throttle': 20,
+        }
+  },
   }
 }
