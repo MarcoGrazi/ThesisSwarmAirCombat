@@ -21,11 +21,28 @@
     'sample_timeout_s': 120,
     'batch_size_per_learner': [1200],
     'gamma': [0.99],
-    'train_iterations': 20000,
-    'checkpoint_freq': 5000,
+    'train_iterations': 240000,
+    'checkpoint_freq': 8000,
     'checkpoint_length': 3000, #3000/10 = 300/60 = 5 minutes
-    'num_evaluation_episodes': 5,
+    'num_evaluation_episodes': 12,
 },
+# This table shows the approximate number of matches needed
+# for TrueSkill to converge (μ and σ stabilize), depending
+# on the number of players/teams involved in each game.
+#
+#   Rule                | Matches Needed
+#   --------------------+----------------
+#   16-player FFA       |        3
+#   8-player FFA        |        3
+#   4-player FFA        |        5
+#   2-player FFA (1v1)  |       12
+#   2:2:2:2 teams       |       10
+#   4:4:4:4 teams       |       20
+#   4v4                 |       46
+#   8v8                 |       91
+# use this info to set num_evaluation episodes depending on how many players and teams are used
+
+
   'env_config' :
     {
       'rho' : 1.239,
