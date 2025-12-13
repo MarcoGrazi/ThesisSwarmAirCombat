@@ -1,162 +1,234 @@
 import numpy as np
 
+
 class FixedWingAircraft:
+    """
+    Fixed-wing aircraft 6DOF rigid-body simulator (Euler-angle attitude).
+
+    High-level model:
+      - State is stored as position (world frame), velocity (body frame),
+        Euler orientation (world->body angles), and body angular rates.
+      - At each step() we:
+          1) Compute forces & moments in body frame (aero + thrust + gravity).
+          2) Integrate translational dynamics in body coordinates.
+          3) Transform body velocity to world frame to integrate position.
+          4) Integrate rotational dynamics using rigid-body equations.
+          5) Log telemetry.
+
+    Frames (as implied by your code/comments):
+      - World / vehicle frame: Z-down convention is assumed for gravity.
+      - Body frame: [u, v, w] = [forward, lateral, vertical] (vertical consistent with Z-down).
+      - Wind frame: aerodynamic frame aligned with incoming airflow for aero forces.
+
+    Note:
+      - This is an explicit-Euler integrator. It is simple and fast, but can become
+        numerically unstable with large time steps or aggressive maneuvers.
+    """
+
     def __init__(self, config, rho, g, frequency):
         """
-        Initialize the 6DOF aircraft physics model.
-        
-        :param config: Configuration dictionary loaded from UAV_config section of a YAML file.
-        :param rho: Air density in kg/m^3 (environmental parameter).
-        :param g: Gravitational acceleration (typically 9.81 m/s^2).
-        :param frequency: Simulation update frequency in Hz.
+        Initialize the aircraft model with environment and aircraft parameters.
+
+        Parameters
+        ----------
+        config : dict
+            Configuration dictionary loaded from a YAML file (UAV_config section).
+            Contains mass/inertia, aero coefficient polynomials, geometry, thrust limits, etc.
+        rho : float
+            Air density [kg/m^3].
+        g : float
+            Gravitational acceleration [m/s^2].
+        frequency : float
+            Simulation update frequency [Hz]. The time step is dt = 1/frequency.
+
+        Side effects
+        ------------
+        - Loads all aircraft parameters from config into instance fields.
+        - Initializes state vectors and telemetry buffers.
         """
 
-        # Environmental and physical constants
+        # --- Environment constants ---
+        # These are external parameters that affect aerodynamic forces (rho) and weight (g).
         self.rho = rho
         self.g = g
 
-        # Aircraft physical properties
-        self.m = config['mass']                            # Aircraft mass [kg]
-        self.max_speed = config['max_speed']              # Maximum allowable airspeed [m/s]
-        self.max_acc = config['max_acc']                  # Maximum allowable acceleration [m/s^2]
-        self.bounding_box = np.array(config['bounding_box'])  # Aircraft bounding dimensions for collision/physics
+        # --- Aircraft physical properties ---
+        # These define basic mass/inertia limits and simple kinematic safety constraints.
+        self.m = config['mass']                               # Mass [kg]
+        self.max_speed = config['max_speed']                  # Max allowable airspeed magnitude [m/s]
+        self.max_acc = config['max_acc']                      # Max allowable acceleration "multiplier" (later used as max_acc*g)
+        self.bounding_box = np.array(config['bounding_box'])  # Dimensions for collision/physics [m]
 
-        # Inertia tensor and its inverse for rotational dynamics
+        # --- Inertia tensor ---
+        # Defines resistance to rotation about principal axes (in body frame).
         inertia_tensor = np.array(config['inertia_tensor'], dtype=np.float64)
         self.I = inertia_tensor
-        self.I_inv = np.linalg.inv(inertia_tensor)         # Pre-compute inverse for torque calculations
+        self.I_inv = np.linalg.inv(inertia_tensor)  # Precompute inverse for efficient torque->angular-acc conversion
 
-        # === Aerodynamic Coefficients (from config) ===
-        # Front section (main wing/body)
-        self.a_CL_c = np.array(config['airframe']['coefficients']['front']['lift'])     # Lift coeffs
-        self.a_CDL_c = np.array(config['airframe']['coefficients']['front']['drag'])    # Drag coeffs
-        self.a_CY_c = np.array(config['airframe']['coefficients']['side']['lateral'])   # Side force coeffs
-        self.a_CDY_c = np.array(config['airframe']['coefficients']['side']['drag'])     # Side drag coeffs
-        self.a_COF = np.array(config['airframe']['COF'])                                 # Center of force [x, y, z]
-        self.a_surface = config['airframe']['surface']                                   # Surface area [m²]
+        # --- Aerodynamic parameters (polynomial coefficient vectors) ---
+        # Airframe coefficients:
+        #   - CL vs AoA   (lift)
+        #   - CDL vs AoA  (drag along wind)
+        #   - CY vs beta  (side force)
+        #   - CDY vs beta (side drag; in this code it is evaluated but not used further)
+        self.a_CL_c = np.array(config['airframe']['coefficients']['front']['lift'])
+        self.a_CDL_c = np.array(config['airframe']['coefficients']['front']['drag'])
+        self.a_CY_c = np.array(config['airframe']['coefficients']['side']['lateral'])
+        self.a_CDY_c = np.array(config['airframe']['coefficients']['side']['drag'])
 
-        # Ailerons (roll control surfaces)
+        # Center of force (lever arm) and reference surface for the main airframe.
+        self.a_COF = np.array(config['airframe']['COF'])   # Force application point relative to CG [m]
+        self.a_surface = config['airframe']['surface']     # Reference surface area [m^2]
+
+        # --- Ailerons (roll control) ---
+        # Coefficients map control deflection to CL/CD contributions for each aileron side.
         self.al_CL_c = np.array(config['aleiron']['coefficients']['lift'])
         self.al_CD_c = np.array(config['aleiron']['coefficients']['drag'])
-        self.al_COF = np.array(config['aleiron']['COF'])
-        self.al_surface = config['aleiron']['surface']
+        self.al_COF = np.array(config['aleiron']['COF'])       # Lever arm for roll moment estimation [m]
+        self.al_surface = config['aleiron']['surface']         # Surface area [m^2]
 
-        # Elevons (pitch control surfaces)
+        # --- Elevons / elevators (pitch control) ---
         self.el_CL_c = np.array(config['elevons']['coefficients']['lift'])
         self.el_CD_c = np.array(config['elevons']['coefficients']['drag'])
         self.el_COF = np.array(config['elevons']['COF'])
         self.el_surface = config['elevons']['surface']
 
-        # Rudders (yaw control surfaces)
+        # --- Rudders (yaw control) ---
         self.r_CY_c = np.array(config['rudders']['coefficients']['lateral'])
         self.r_CD_c = np.array(config['rudders']['coefficients']['drag'])
         self.r_COF = np.array(config['rudders']['COF'])
         self.r_surface = config['rudders']['surface']
 
-        # Maximum available engine thrust [N]
-        self.max_thrust = config['max_thrust']
-        self.aerobrake_CD = config['aerobrake_CD']
-        self.aerobrake_surface = config['aerobrake_surface']
+        # --- Propulsion and braking ---
+        self.max_thrust = config['max_thrust']              # Max thrust [N]
+        self.aerobrake_CD = config['aerobrake_CD']          # Aerobrake drag coefficient multiplier
+        self.aerobrake_surface = config['aerobrake_surface']# Aerobrake reference area [m^2]
 
-        # Stall flag (to be triggered during AoA evaluation)
+        # --- Flight condition flags ---
+        # Set during angle computations to indicate extreme aerodynamic angles.
         self.stall = False
 
-        # Simulation timestep (dt = 1/frequency)
+        # --- Simulation time step ---
+        # All integration uses a fixed dt.
         self.dt = 1 / frequency
 
-        # === State Vectors ===
-        # Position in world frame [x, y, z]
+        # =========================
+        # State vectors (6DOF)
+        # =========================
+
+        # Position in world frame [x, y, z] [m]
         self.p = np.zeros(3)
 
-        # Linear velocity in body frame [u, v, w]
+        # Linear velocity in body frame [u, v, w] [m/s]
         self.v = np.zeros(3)
 
-        # Orientation (Euler angles) [roll, pitch, yaw]
+        # Orientation in Euler angles [roll, pitch, yaw] [rad]
         self.o = np.zeros(3)
 
-        # Angular velocity in body frame [p, q, r]
+        # Angular velocity (body rates) [p, q, r] [rad/s]
         self.w = np.zeros(3)
 
-        # === Telemetry Logging ===
-        # Used for post-simulation analysis or visualization
+        # =========================
+        # Telemetry buffers
+        # =========================
+        # Lists are appended each step to support plotting and debugging.
         self.telemetry = {
             'position': [],
             'orientation': [],
             'velocity': [],
             'angular_velocity': [],
             'acceleration': [],
-            'AoA': [],             # Angle of Attack over time
-            'sideslip': [],        # Sideslip angle over time
-            'force': [],
-            'moment': [],
-            'commands': []         # Control input history
+            'AoA': [],             # Angle of Attack (alpha) history
+            'sideslip': [],        # Sideslip angle (beta) history
+            'force': [],           # Net body-frame force history
+            'moment': [],          # Net body-frame moment history
+            'commands': []         # Stored control inputs per step (action vector)
         }
 
     def reset(self, position, orientation, speed, config):
         """
-        Reset the aircraft's dynamic state to initial conditions.
+        Reset the aircraft state (and reload configuration parameters).
 
-        :param position: Initial position in world frame (3D vector)
-        :param orientation: Initial Euler angles (roll, pitch, yaw) in radians (3D vector)
-        :param speed: Initial forward speed in body frame along X-axis (scalar)
+        Parameters
+        ----------
+        position : array-like (3,)
+            Initial position in world frame [m].
+        orientation : array-like (3,)
+            Initial Euler angles [roll, pitch, yaw] in radians.
+        speed : float
+            Initial forward speed in body frame along +X (u component) [m/s].
+        config : dict
+            Configuration dictionary; allows reloading aircraft parameters at reset time.
+
+        Side effects
+        ------------
+        - Overwrites parameters (mass, inertia, aero coeffs, surfaces, etc.) from config.
+        - Resets state (p, v, o, w) and clears telemetry.
+        - Logs an initial (t=0) telemetry snapshot.
         """
 
-                # Aircraft physical properties
-        self.m = config['mass']                            # Aircraft mass [kg]
-        self.max_speed = config['max_speed']              # Maximum allowable airspeed [m/s]
-        self.max_acc = config['max_acc']                  # Maximum allowable acceleration [m/s^2]
-        self.bounding_box = np.array(config['bounding_box'])  # Aircraft bounding dimensions for collision/physics
+        # =========================
+        # Reload aircraft parameters
+        # =========================
+        # This mirrors __init__ so you can reset with a new aircraft model.
 
-        # Inertia tensor and its inverse for rotational dynamics
+        self.m = config['mass']
+        self.max_speed = config['max_speed']
+        self.max_acc = config['max_acc']
+        self.bounding_box = np.array(config['bounding_box'])
+
         inertia_tensor = np.array(config['inertia_tensor'], dtype=np.float64)
         self.I = inertia_tensor
-        self.I_inv = np.linalg.inv(inertia_tensor)         # Pre-compute inverse for torque calculations
+        self.I_inv = np.linalg.inv(inertia_tensor)
 
-        # === Aerodynamic Coefficients (from config) ===
-        # Front section (main wing/body)
-        self.a_CL_c = np.array(config['airframe']['coefficients']['front']['lift'])     # Lift coeffs
-        self.a_CDL_c = np.array(config['airframe']['coefficients']['front']['drag'])    # Drag coeffs
-        self.a_CY_c = np.array(config['airframe']['coefficients']['side']['lateral'])   # Side force coeffs
-        self.a_CDY_c = np.array(config['airframe']['coefficients']['side']['drag'])     # Side drag coeffs
-        self.a_COF = np.array(config['airframe']['COF'])                                 # Center of force [x, y, z]
-        self.a_surface = config['airframe']['surface']                                   # Surface area [m²]
+        self.a_CL_c = np.array(config['airframe']['coefficients']['front']['lift'])
+        self.a_CDL_c = np.array(config['airframe']['coefficients']['front']['drag'])
+        self.a_CY_c = np.array(config['airframe']['coefficients']['side']['lateral'])
+        self.a_CDY_c = np.array(config['airframe']['coefficients']['side']['drag'])
+        self.a_COF = np.array(config['airframe']['COF'])
+        self.a_surface = config['airframe']['surface']
 
-        # Ailerons (roll control surfaces)
         self.al_CL_c = np.array(config['aleiron']['coefficients']['lift'])
         self.al_CD_c = np.array(config['aleiron']['coefficients']['drag'])
         self.al_COF = np.array(config['aleiron']['COF'])
         self.al_surface = config['aleiron']['surface']
 
-        # Elevons (pitch control surfaces)
         self.el_CL_c = np.array(config['elevons']['coefficients']['lift'])
         self.el_CD_c = np.array(config['elevons']['coefficients']['drag'])
         self.el_COF = np.array(config['elevons']['COF'])
         self.el_surface = config['elevons']['surface']
 
-        # Rudders (yaw control surfaces)
         self.r_CY_c = np.array(config['rudders']['coefficients']['lateral'])
         self.r_CD_c = np.array(config['rudders']['coefficients']['drag'])
         self.r_COF = np.array(config['rudders']['COF'])
         self.r_surface = config['rudders']['surface']
 
-        # Maximum available engine thrust [N]
         self.max_thrust = config['max_thrust']
         self.aerobrake_CD = config['aerobrake_CD']
         self.aerobrake_surface = config['aerobrake_surface']
 
-        # === Reset dynamic state variables ===
+        # =========================
+        # Reset dynamic state
+        # =========================
 
-        self.p = position                     # Position in world frame [x, y, z]
-        self.v = np.array([speed, 0.0, 0.0])  # Initial velocity in body frame [u, v, w]
-        self.o = orientation                  # Orientation (Euler angles) [roll, pitch, yaw]
-        self.w = np.array([0.0, 0.0, 0.0])    # Angular velocity in body frame [p, q, r]
+        # World position [m]
+        self.p = position
 
-        # Reset stall condition
+        # Body-frame velocity [m/s]: start with forward velocity only.
+        self.v = np.array([speed, 0.0, 0.0])
+
+        # Euler angles [rad]
+        self.o = orientation
+
+        # Body rates [rad/s]
+        self.w = np.array([0.0, 0.0, 0.0])
+
+        # Reset stall indicator
         self.stall = False
 
-        # === Reset telemetry log ===
-        # Clears and initializes the log used to track state evolution during the simulation
-
+        # =========================
+        # Reset telemetry
+        # =========================
         self.telemetry = {
             'position': [],
             'orientation': [],
@@ -170,142 +242,190 @@ class FixedWingAircraft:
             'commands': []
         }
 
-        # === Log initial values ===
-        # These provide a baseline (t=0) state for the simulation
-
+        # Log baseline state (t=0)
         self.telemetry['position'].append(self.p.copy())
         self.telemetry['orientation'].append(self.o.copy())
         self.telemetry['velocity'].append(self.v.copy())
         self.telemetry['angular_velocity'].append(self.w.copy())
-        self.telemetry['acceleration'].append([0, 0, 0])    # Assuming rest + gravity in Z by default
-        self.telemetry['AoA'].append(0)                       # Angle of Attack (deg or rad)
-        self.telemetry['sideslip'].append(0)                  # Sideslip angle (deg or rad)
-        self.telemetry['force'].append([0, 0, 0])             # Net aerodynamic + thrust forces
-        self.telemetry['moment'].append([0, 0, 0])            # Net torques/moments
-        self.telemetry['commands'].append([0, 0, 0, 0])       # Control inputs: [UpAngle, SideAngle, Speed, Fire]
+
+        # At reset we assume no computed acceleration/forces yet.
+        self.telemetry['acceleration'].append([0, 0, 0])
+        self.telemetry['AoA'].append(0)
+        self.telemetry['sideslip'].append(0)
+        self.telemetry['force'].append([0, 0, 0])
+        self.telemetry['moment'].append([0, 0, 0])
+
+        # Commands log placeholder for consistency with step()
+        self.telemetry['commands'].append([0, 0, 0, 0])
 
     def dummy_step(self, dummy_type, turn_radius, direction, speed):
         """
-        Advance the aircraft one timestep using a simplified (non-physical) motion model.
+        Advance the model using a simplified kinematic motion rule (non-physical).
 
-        :param dummy_type: Type of trajectory ['line', 'curve', 'fixed']
-        :param turn_radius: Radius of turn (used only for 'curve' type)
-        :param direction: Direction of turn (+1 for right, -1 for left, 0 for no turn)
+        This function is useful when you want deterministic motion without forces:
+          - "line": constant forward motion along current orientation
+          - "curve": constant-speed turning in yaw with a given turn radius
+          - "fixed": no motion (hold position)
+
+        Parameters
+        ----------
+        dummy_type : str
+            One of {'line', 'curve', 'fixed'}.
+        turn_radius : float
+            Turn radius [m] used only for 'curve'.
+        direction : int
+            Turn direction: +1 right, -1 left, 0 none.
+        speed : float
+            Forward speed [m/s].
         """
 
         if dummy_type == 'line':
-            # === Straight line motion ===
-            # Moves forward in the direction of current orientation at constant velocity
+            # Constant forward velocity in body coordinates.
             self.v = np.array([speed, 0.0, 0.0])
-            R = self.body_to_vehicle(self.o[0], self.o[1], self.o[2])  # Rotation matrix: body → world
-            self.p = self.p.copy() + (R @ self.v) * self.dt            # Update position using v_b transformed to world frame
+
+            # Convert body velocity to world frame and integrate position.
+            R = self.body_to_vehicle(self.o[0], self.o[1], self.o[2])
+            self.p = self.p.copy() + (R @ self.v) * self.dt
 
         elif dummy_type == 'curve':
-            # === Turning motion ===
-            # Simplified 2D yaw turn, constant altitude and speed
+            # Flat turn assumption: heading changes at rate v/R.
+            turn_rate = speed / turn_radius
 
-            turn_rate = speed / turn_radius              # Yaw rate [rad/s] from speed and radius
+            # Update yaw (heading) only; roll/pitch remain unchanged.
+            self.o[2] += direction * turn_rate * self.dt
 
-            self.o[2] += direction * turn_rate * self.dt # Update yaw angle (only heading changes)
+            # Forward velocity remains constant in body frame.
+            self.v = np.array([speed, 0.0, 0.0])
 
-            self.v = np.array([speed, 0.0, 0.0])          # Velocity remains forward in body frame
+            # Integrate position in world frame.
+            R = self.body_to_vehicle(self.o[0], self.o[1], self.o[2])
+            self.p += (R @ self.v) * self.dt
 
-            R = self.body_to_vehicle(self.o[0], self.o[1], self.o[2])  # Update orientation matrix
-            self.p += (R @ self.v) * self.dt             # Update position in world frame
-
-            self.w = np.array([0.0, 0.0, direction * turn_rate])  # Simulated angular velocity (yaw only)
+            # Body rates: only yaw rate is non-zero in this simplified motion.
+            self.w = np.array([0.0, 0.0, direction * turn_rate])
 
         elif dummy_type == 'fixed':
-            # === Static case ===
-            # No movement at all, useful for testing or holding position
+            # Explicit "do nothing" case. Copy keeps semantics consistent with other branches.
+            self.p = self.p.copy()
 
-            self.p = self.p.copy()  # Ensure immutability
-
-        # === Log dummy step telemetry ===
-
+        # =========================
+        # Telemetry logging (dummy mode)
+        # =========================
+        # We log zeros for force/moment/acceleration since no physics are computed here.
         self.telemetry['position'].append(self.p.copy())
         self.telemetry['orientation'].append(self.o.copy())
         self.telemetry['velocity'].append(self.v.copy())
         self.telemetry['angular_velocity'].append(self.w.copy())
 
-        self.telemetry['acceleration'].append(np.zeros(3))      # No acceleration in dummy motion
-        self.telemetry['AoA'].append(0)                          # Angle of attack = 0 by assumption
-        self.telemetry['sideslip'].append(0)                     # No sideslip modeled
-        self.telemetry['force'].append(np.zeros(3))              # No forces computed
-        self.telemetry['moment'].append(np.zeros(3))             # No torques computed
-        self.telemetry['commands'].append(np.zeros(4))           # No control input simulated
+        self.telemetry['acceleration'].append(np.zeros(3))
+        self.telemetry['AoA'].append(0)
+        self.telemetry['sideslip'].append(0)
+        self.telemetry['force'].append(np.zeros(3))
+        self.telemetry['moment'].append(np.zeros(3))
+        self.telemetry['commands'].append(np.zeros(4))
 
     def step(self, throttle, elevon_angle, aleiron_angle, rudder_angle, action):
         """
-        Perform a single physics timestep update using the 6DOF rigid-body equations.
+        Advance the aircraft by one physics time step using rigid-body 6DOF equations.
 
-        :param throttle: Engine throttle command (scalar)
-        :param elevon_angle: Elevon deflection [degrees]
-        :param aleiron_angle: Aileron deflection [degrees]
-        :param rudder_angle: Rudder deflection [degrees]
-        :param action: Full control action array [throttle, aileron, elevon, rudder, ...]
+        Inputs are interpreted as "commands" that affect aerodynamic forces and thrust.
+
+        Parameters
+        ----------
+        throttle : float
+            Engine throttle command (scalar). In compute_forces_moment you clamp thrust to be non-negative.
+        elevon_angle : float
+            Elevon deflection [deg].
+        aleiron_angle : float
+            Aileron deflection [deg].
+        rudder_angle : float
+            Rudder deflection [deg].
+        action : array-like
+            Full command vector saved into telemetry (e.g. RL action). Only logged here.
+
+        Notes
+        -----
+        - Translational integration is done in body coordinates, which requires adding ω x v
+          (the "rotating frame" term) to get correct body-frame acceleration.
+        - Position is updated in world coordinates using the body->world rotation matrix.
+        - Rotational dynamics use Euler's rigid-body equation with inertia tensor I.
         """
 
-        # === Compute total force and moment in body frame ===
-        # Includes aerodynamic, control surface, and engine effects
+        # Compute net force/moment in BODY frame, and aerodynamic angles for logging.
         force_body, moment_body, AoA, sideslip = self.compute_forces_moment(
             throttle, elevon_angle, aleiron_angle, rudder_angle
         )
 
-        # === Translational Acceleration (Newton's 2nd Law) ===
-        # a = (F/m) + ω × v (in body frame)
+        # =========================
+        # Translational dynamics
+        # =========================
+        # When expressing velocity in the rotating body frame:
+        #   v_dot_body = (F/m) - ω×v   (depending on sign convention).
+        # Here you're effectively adding ω×v as "rot_a"; consistent with your derived equations.
         rot_a = np.array([
-            self.w[2]*self.v[1] - self.w[1]*self.v[2],
-            self.w[0]*self.v[2] - self.w[2]*self.v[0],
-            self.w[1]*self.v[0] - self.w[0]*self.v[1]
-        ])  # Coriolis acceleration
+            self.w[2] * self.v[1] - self.w[1] * self.v[2],
+            self.w[0] * self.v[2] - self.w[2] * self.v[0],
+            self.w[1] * self.v[0] - self.w[0] * self.v[1]
+        ])
 
-        a = rot_a + force_body / self.m  # Total acceleration in body frame
+        # Net body acceleration [m/s^2]
+        a = rot_a + force_body / self.m
 
-        # === Cap excessive linear acceleration ===
+        # Safety cap on acceleration magnitude (helps stability / limits extreme dynamics)
         acc = np.linalg.norm(a)
         if acc > self.max_acc * self.g:
             a = (a / acc) * (self.max_acc * self.g)
-        
-        self.v += a * self.dt  # Integrate linear velocity in body frame
 
-        # === Cap maximum forward speed ===
+        # Integrate body velocity (explicit Euler)
+        self.v += a * self.dt
+
+        # Cap overall speed magnitude
         speed = np.linalg.norm(self.v)
         speed = np.where(speed < 1e-3, 0.0, speed)
         if speed > self.max_speed:
             self.v = (self.v / speed) * self.max_speed
 
-        # === Update position in world frame ===
-        # Use rotation matrix to convert body velocity to inertial frame
+        # =========================
+        # Position update (world frame)
+        # =========================
+        # Convert body velocity to world velocity and integrate.
         R = self.body_to_vehicle(self.o[0], self.o[1], self.o[2])
         self.p += (R @ self.v) * self.dt
 
-        # === Rotational Dynamics (Euler's Equation) ===
-        # Angular acceleration: I⁻¹ * (M - ω × (Iω))
+        # =========================
+        # Rotational dynamics
+        # =========================
+        # Euler rigid-body equation:
+        #   ω_dot = I^{-1} ( M - ω×(Iω) )
         wa = self.I_inv @ (moment_body - np.cross(self.w, np.dot(self.I, self.w)))
 
-        # Optional cap to prevent instability (very large angular acceleration)
+        # Optional cap on angular acceleration to prevent numerical blow-up.
         wa_norm = np.linalg.norm(wa)
         if wa_norm > 1000:
             wa = (wa / wa_norm) * 1000
 
-        # === Angular Integration (Euler angle rates from body rates) ===
-        # Transformation matrix from body angular rates to Euler angle rates
+        # =========================
+        # Euler angle kinematics
+        # =========================
+        # Convert body rates [p,q,r] into Euler angle rates [roll_dot, pitch_dot, yaw_dot].
         att = np.array([
             [1, np.sin(self.o[0]) * np.tan(self.o[1]), np.cos(self.o[0]) * np.tan(self.o[1])],
             [0, np.cos(self.o[0]), -np.sin(self.o[0])],
             [0, np.sin(self.o[0]) / np.cos(self.o[1]), np.cos(self.o[0]) / np.cos(self.o[1])]
         ])
 
-        self.o += (att @ self.w) * self.dt  # Integrate orientation
-        self.w += wa * self.dt              # Integrate angular velocity
+        # Integrate attitude and body rates (explicit Euler)
+        self.o += (att @ self.w) * self.dt
+        self.w += wa * self.dt
 
-        # === Normalize Euler angles to [-π, π] ===
-        self.o[0] = (self.o[0] + np.pi) % (2 * np.pi) - np.pi  # Roll
-        self.o[1] = (self.o[1] + np.pi) % (2 * np.pi) - np.pi  # Pitch
-        self.o[2] = (self.o[2] + np.pi) % (2 * np.pi) - np.pi  # Yaw
+        # Normalize angles to [-pi, pi] for numerical hygiene and easier downstream usage.
+        self.o[0] = (self.o[0] + np.pi) % (2 * np.pi) - np.pi
+        self.o[1] = (self.o[1] + np.pi) % (2 * np.pi) - np.pi
+        self.o[2] = (self.o[2] + np.pi) % (2 * np.pi) - np.pi
 
-        # === Log Telemetry ===
+        # =========================
+        # Telemetry logging
+        # =========================
         self.telemetry['position'].append(self.p.copy())
         self.telemetry['orientation'].append(self.o.copy())
         self.telemetry['velocity'].append(self.v.copy())
@@ -315,78 +435,106 @@ class FixedWingAircraft:
         self.telemetry['sideslip'].append(sideslip)
         self.telemetry['force'].append(np.array(force_body))
         self.telemetry['moment'].append(np.array(moment_body))
-        self.telemetry['commands'].append(np.array(action))  # Last element of action is fire command, unused in physics
+        self.telemetry['commands'].append(np.array(action))
 
     def compute_forces_moment(self, throttle, elevon_angle, aleiron_angle, rudder_angle):
         """
-        Compute the total external force and moment acting on the aircraft in body frame.
+        Compute total external force and moment acting on the aircraft in BODY frame.
 
-        Includes contributions from:
-        - Aerodynamic forces and moments (control surfaces)
-        - Gravity (transformed into body frame)
-        - Engine thrust
+        Components included:
+          - Aerodynamic forces and moments (airframe + control surfaces + aerobrake)
+          - Weight projected into body axes
+          - Thrust along body +X
 
-        :param throttle: Throttle input (0 to 1), scalar
-        :param elevon_angle: Elevon deflection in degrees
-        :param aleiron_angle: Aileron deflection in degrees
-        :param rudder_angle: Rudder deflection in degrees
+        Parameters
+        ----------
+        throttle : float
+            Throttle command. Negative throttle is interpreted here as aerobrake deployment
+            (via aerobrake_deploy) while thrust is clamped to >= 0.
+        elevon_angle : float
+            Elevon deflection [deg].
+        aleiron_angle : float
+            Aileron deflection [deg].
+        rudder_angle : float
+            Rudder deflection [deg].
 
-        :return:
-            force:     Net external force in body frame [N]
-            moment:    Net external moment (torque) in body frame [Nm]
-            AoA:       Angle of attack [rad or deg] (for telemetry)
-            sideslip:  Sideslip angle [rad or deg] (for telemetry)
+        Returns
+        -------
+        force : ndarray (3,)
+            Net force vector in body frame [N].
+        moment : ndarray (3,)
+            Net moment vector in body frame [N*m].
+        AoA : float
+            Angle of attack returned from aero calc (units as produced there; you use rad internally).
+        sideslip : float
+            Sideslip returned from aero calc (same).
         """
+
+        # Aerobrake deployment is derived from negative throttle magnitude.
         aerobrake_deploy = abs(min(throttle, 0))
 
-        # === Aerodynamic forces and moments from control surfaces ===
+        # Aerodynamic forces and moments
         F_aero, M_aero, AoA, sideslip = self.compute_aero_forces_and_moment(
             elevon_angle, aleiron_angle, rudder_angle, aerobrake_deploy
         )
 
-        # === Gravitational force in body frame ===
-        # Gravity vector in world frame: [0, 0, +mg] with Z-down convention
-        # Convert to body frame by applying inverse rotation
+        # Weight in world frame under Z-down convention is +mg along +Z_world.
+        # Project to body frame using world->body rotation.
         F_weight = self.vehicle_to_body(self.o[0], self.o[1], self.o[2]) @ np.array([0.0, 0.0, self.m * self.g])
 
-        # === Engine thrust force ===
-        # Acts along the positive X-axis of the body frame
-        F_thrust = np.array([self.max_thrust * throttle, 0.0, 0.0])
+        # Thrust acts along +X_body. Clamped so negative throttle does not create reverse thrust here.
+        F_thrust = np.array([max(self.max_thrust * throttle, 0), 0.0, 0.0])
 
-        # === Total external force and moment in body frame ===
+        # Sum of all external forces and moments (all expressed in body frame).
         force = F_thrust + F_weight + F_aero
-        moment = M_aero  # No propulsion-induced moment modeled here
+        moment = M_aero
 
         return force, moment, AoA, sideslip
 
     def compute_aero_forces_and_moment(self, elevon_angle, aleiron_angle, rudder_angle, aerobrake_deploy):
         """
-        Compute aerodynamic forces and moments in the body frame based on current flight condition
-        and control surface deflections.
+        Compute aerodynamic forces and moments based on current velocity and control deflections.
 
-        :param elevon_angle: Elevon deflection [degrees]
-        :param aleiron_angle: Aileron deflection [degrees]
-        :param rudder_angle: Rudder deflection [degrees]
+        This function:
+          1) Derives aerodynamic angles (AoA, sideslip) from body velocity.
+          2) Evaluates airframe/control-surface force models in wind frame.
+          3) Rotates forces wind -> body.
+          4) Computes aerodynamic moments.
 
-        :return:
-            F_aero:    Total aerodynamic force in body frame [N]
-            M_aero:    Total aerodynamic moment in body frame [Nm]
-            AoA:       Angle of Attack [rad]
-            sideslip:  Sideslip angle [rad]
+        Parameters
+        ----------
+        elevon_angle : float
+            Elevon deflection [deg].
+        aleiron_angle : float
+            Aileron deflection [deg].
+        rudder_angle : float
+            Rudder deflection [deg].
+        aerobrake_deploy : float
+            Aerobrake deployment factor (0..1).
+
+        Returns
+        -------
+        F_aero : ndarray (3,)
+            Total aerodynamic force in body frame [N].
+        M_aero : ndarray (3,)
+            Total aerodynamic moment in body frame [N*m].
+        AoA : float
+            Angle of attack [rad].
+        sideslip : float
+            Sideslip [rad].
         """
 
-        # === Body-frame airspeed magnitude ===
-        V = max(np.linalg.norm(self.v), 1e-3)  # Prevent division by zero
+        # Airspeed magnitude; guard small values to avoid division by zero.
+        V = max(np.linalg.norm(self.v), 1e-3)
 
-        # Decompose velocity into components
-        u, v, w = self.v  # u = forward, v = lateral, w = vertical in body frame
+        # Body velocity components
+        u, v, w = self.v
 
-        # === Compute aerodynamic angles ===
-        AoA = np.arctan2(w, u)        # Angle of Attack (alpha)
-        sideslip = np.arcsin(v / V)   # Sideslip angle (beta)
+        # Aerodynamic angles derived from velocity direction in body frame.
+        AoA = np.arctan2(w, u)
+        sideslip = np.arcsin(v / V)
 
-        # === Stall check and clipping ===
-        # Prevent extreme angles which may destabilize computation
+        # Flag extreme angles and clamp to avoid invalid trig / rotations.
         if (AoA > np.deg2rad(89) or AoA < -np.deg2rad(89) or
             sideslip > np.deg2rad(89) or sideslip < -np.deg2rad(89)):
             AoA = np.clip(AoA, -np.deg2rad(89), np.deg2rad(89))
@@ -395,241 +543,245 @@ class FixedWingAircraft:
         else:
             self.stall = False
 
-        # === Aerodynamic forces (wind frame) ===
-        # These functions return force vectors (in wind frame) and any associated moments
+        # --- Aerodynamic forces in wind frame ---
+        # Each component model returns a force vector aligned with the wind coordinate system.
         f_airframe_wind = self.Airframe(np.rad2deg(AoA), np.rad2deg(sideslip), V)
         f_aleirons_wind, roll_moment_aleirons = self.Ailerons(aleiron_angle, V)
         f_elevons_wind = self.Elevators(elevon_angle, V)
         f_rudders_wind = self.Rudders(rudder_angle, V)
 
-        # === Rotate aerodynamic forces into body frame ===
-        # Each surface's force is in wind frame → transform it to body frame
+        # Wind->body rotation matrix for converting aerodynamic forces.
         R_w2b = self.wind_to_body(AoA, sideslip)
+
+        # Convert aerodynamic forces into body frame so they can be summed with thrust/weight.
         f_airframe_body = R_w2b @ f_airframe_wind
         f_elevons_body = R_w2b @ f_elevons_wind
         f_aleirons_body = R_w2b @ f_aleirons_wind
         f_rudders_body = R_w2b @ f_rudders_wind
 
-        f_aerobrake = self.Aerobrake(aerobrake_deploy, V)
+        # Aerobrake force is modeled directly as a drag vector (as returned by Aerobrake()).
+        f_aerobrake = self.Aerobrake(V, aerobrake_deploy)
 
-        # === Total aerodynamic force (body frame) ===
+        # Total aerodynamic force in body axes.
         F_aero = f_airframe_body + f_elevons_body + f_aleirons_body + f_rudders_body + f_aerobrake
 
-        # === Aerodynamic moments (body frame) ===
-        # Moments from aerodynamic force offset from CG
+        # --- Aerodynamic moments ---
+        # Compute moments about CG from force application points + any directly modeled moments.
+        # (This keeps the “torque = r × F” approach consistent across surfaces.)
         M_airframe = np.cross(self.a_COF, f_airframe_wind)
-        M_aleirons = roll_moment_aleirons  # Direct moment from aileron differential lift
+        M_aleirons = roll_moment_aleirons
         M_elevons = np.cross(self.el_COF, f_elevons_wind)
         M_rudders = np.cross(self.r_COF, f_rudders_wind)
 
-        # Total moment
         M_aero = M_airframe + M_aleirons + M_elevons + M_rudders
 
         return F_aero, M_aero, AoA, sideslip
 
     def Airframe(self, AoA, sideslip, V):
         """
-        Compute aerodynamic forces generated by the main airframe (fuselage + wing surfaces),
-        expressed in the wind frame.
+        Airframe aerodynamic force model in wind frame.
 
-        :param AoA: Angle of Attack [degrees]
-        :param sideslip: Sideslip angle [degrees]
-        :param V: Airspeed magnitude [m/s]
+        Parameters
+        ----------
+        AoA : float
+            Angle of attack [deg] used to evaluate lift and drag coefficient polynomials.
+        sideslip : float
+            Sideslip angle [deg] used to evaluate lateral force coefficients.
+        V : float
+            Airspeed magnitude [m/s].
 
-        :return: 3D aerodynamic force vector in wind frame [N]
-                - X_w: -drag (along relative wind)
-                - Y_w: -lateral (to the right wing)
-                - Z_w: -lift (downward in wind frame)
+        Returns
+        -------
+        ndarray (3,)
+            Wind-frame aerodynamic force [N]:
+              X_w: drag (negative, opposes motion)
+              Y_w: lateral (negative by convention used here)
+              Z_w: lift (negative so that positive lift corresponds to -Z_w here)
+
+        Implementation notes
+        --------------------
+        - Coefficients are evaluated with np.polyval(), so the arrays are expected
+          in decreasing polynomial order.
+        - Dynamic pressure q = 0.5 * rho * V^2.
         """
 
-        # === Aerodynamic coefficients from polynomials ===
-        CL = np.polyval(self.a_CL_c, np.clip(AoA, -60, 60))     # Lift coefficient vs AoA
-        CDL = np.polyval(self.a_CDL_c, AoA)                     # Longitudinal drag vs AoA
-        CDY = np.polyval(self.a_CDY_c, sideslip)                # Lateral drag (usually negligible)
-        CY  = np.polyval(self.a_CY_c, np.clip(sideslip, -60, 60))  # Side force vs sideslip
+        CL = np.polyval(self.a_CL_c, np.clip(AoA, -60, 60))
+        CDL = np.polyval(self.a_CDL_c, AoA)
+        CDY = np.polyval(self.a_CDY_c, sideslip)  # currently computed but not used further
+        CY  = np.polyval(self.a_CY_c, np.clip(sideslip, -60, 60))
 
-        # === Dynamic pressure ===
-        q = 0.5 * self.rho * V**2  # Bernoulli dynamic pressure [Pa]
+        q = 0.5 * self.rho * V**2
 
-        # === Compute forces in wind frame ===
-        lift = CL * q * self.a_surface      # Z_w: Lift (acts perpendicular to wind)
-        drag = CDL * q * self.a_surface     # X_w: Drag (acts along wind vector)
-        lateral = CY * q * self.a_surface   # Y_w: Side force (from sideslip)
+        lift = CL * q * self.a_surface
+        drag = CDL * q * self.a_surface
+        lateral = CY * q * self.a_surface
 
-        # === Return wind-frame aerodynamic force vector ===
-        # Wind frame axes:
-        #   X_w: along airspeed vector (forward)
-        #   Y_w: right wing
-        #   Z_w: down when AoA is positive
-        return np.array([
-            -drag,    # Negative because drag opposes motion
-            -lateral, # Negative: rightward sideslip causes leftward force
-            -lift     # Negative: positive lift acts upward in body frame
-        ])
+        return np.array([-drag, -lateral, -lift])
 
     def Ailerons(self, angle, V):
         """
-        Compute aerodynamic forces and rolling moment generated by the ailerons.
+        Aileron aerodynamic force (wind frame) and roll moment (body frame).
 
-        Models differential lift on left and right ailerons based on input deflection.
+        The aileron model assumes two symmetric surfaces with opposite deflection.
+        It computes:
+          - Total lift/drag contribution from both surfaces
+          - A roll moment proportional to lift and lateral lever arm (y-offset)
 
-        :param angle: Aileron deflection angle [scalar, degrees], 
-                    positive = right aileron down / left aileron up (right roll)
-        :param V: Airspeed magnitude [m/s]
+        Parameters
+        ----------
+        angle : float
+            Aileron deflection [deg]. Sign convention described in the comment.
+        V : float
+            Airspeed magnitude [m/s].
 
-        :return:
-            force: Total aerodynamic force vector in wind frame [N]
-            roll_moment: Rolling moment due to differential lift [Nm]
+        Returns
+        -------
+        force : ndarray (3,)
+            Total force in wind frame [N].
+        roll_moment : ndarray (3,)
+            Roll moment vector [N*m] (Mx, My, Mz). Only Mx is non-zero here.
         """
 
-        # === Simplified lift model for left and right ailerons ===
-        # CL is approximated linearly instead of using polynomials for now
+        # Evaluate polynomial fits for CL and CD. Scaling "angle * 40" matches your coefficient domain.
+        CL_1 = np.polyval(self.al_CL_c, angle)
+        CD_1 = np.polyval(self.al_CD_c, angle * 40)
 
-        # Right aileron (CL increases with positive angle)
-        CL_1 = np.polyval(self.al_CL_c, angle)  # More accurate polynomial fit
-        CD_1 = np.polyval(self.al_CD_c, angle * 40)  # Adjust scaling to match lookup shape
-
-        # Left aileron (opposite deflection)
-        CL_2 = np.polyval(self.al_CL_c, -angle)  # More accurate polynomial fit
+        CL_2 = np.polyval(self.al_CL_c, -angle)
         CD_2 = np.polyval(self.al_CD_c, -angle * 40)
 
-        # === Dynamic pressure ===
         q = 0.5 * self.rho * V**2
 
-        # === Forces in wind frame ===
         lift_1 = CL_1 * q * self.al_surface
         lift_2 = CL_2 * q * self.al_surface
         drag = (CD_1 + CD_2) * q * self.al_surface
-        lateral = 0  # Ailerons don't generate side force in this model
 
-        # === Total aerodynamic force ===
-        # Assumes lift acts in -Z_w, drag in -X_w
         force = np.array([
-            -drag,               # Drag (along wind direction)
-            -lateral,            # Side force (zero in this model)
-            -(lift_1 + lift_2)   # Total lift from both ailerons
+            -drag,
+            0.0,                 # no lateral force modeled for ailerons
+            -(lift_1 + lift_2)
         ])
 
-        # === Rolling moment (about X_b) ===
-        # Uses vertical force * lateral offset (y-position of ailerons in body frame)
-        roll_moment = 2 * (lift_1 * self.al_COF[1])  # Both ailerons assumed symmetric
-
+        # Roll moment: lift times lateral lever arm (uses y-component of COF).
+        roll_moment = 2 * (lift_1 * self.al_COF[1])
         return force, np.array([roll_moment, 0, 0])
 
     def Elevators(self, angle, V):
         """
-        Compute aerodynamic forces generated by the elevators (or elevons),
-        returned in the wind frame.
+        Elevator / elevon aerodynamic force model in wind frame.
 
-        :param angle: Elevator deflection angle [degrees]
-                    Positive angle = trailing edge down = nose-up moment
-        :param V: Airspeed magnitude [m/s]
+        Parameters
+        ----------
+        angle : float
+            Elevator deflection [deg].
+        V : float
+            Airspeed magnitude [m/s].
 
-        :return:
-            force: Aerodynamic force vector in wind frame [N]
-                - X_w: -drag
-                - Y_w: (0, no lateral force assumed)
-                - Z_w: +lift (positive = up in body frame)
+        Returns
+        -------
+        ndarray (3,)
+            Wind-frame force [N] with drag in -X_w and lift in +Z_w (per your convention).
         """
 
-        # === Aerodynamic coefficients ===
-        # Lift is assumed linear in angle; you use a simplified model here.
-        CL = np.polyval(self.el_CL_c, -angle)  # More accurate polynomial fit
-        CD = np.polyval(self.el_CD_c, -angle * 40)  # Drag increases with deflection
+        CL = np.polyval(self.el_CL_c, -angle)
+        CD = np.polyval(self.el_CD_c, -angle * 40)
 
-        # === Dynamic pressure ===
         q = 0.5 * self.rho * V**2
 
-        # === Forces in wind frame ===
-        lift = CL * q * self.el_surface * 2   # Two elevators assumed
+        # Two elevator surfaces are assumed; hence multiply by 2.
+        lift = CL * q * self.el_surface * 2
         drag = CD * q * self.el_surface * 2
-        lateral = 0  # Elevators typically generate no side force
 
-        return np.array([
-            -drag,     # -X_w: drag resists motion
-            lateral,   #  Y_w: assumed zero
-            lift       #  Z_w: lift acts upward in body frame (positive here)
-        ])
+        return np.array([-drag, 0.0, lift])
 
     def Rudders(self, angle, V):
         """
-        Compute aerodynamic forces generated by the rudders, expressed in the wind frame.
+        Rudder aerodynamic force model in wind frame.
 
-        :param angle: Rudder deflection angle [degrees]
-                    Positive = rudder right → nose yaw right (standard convention)
-        :param V: Airspeed magnitude [m/s]
+        Parameters
+        ----------
+        angle : float
+            Rudder deflection [deg].
+        V : float
+            Airspeed magnitude [m/s].
 
-        :return:
-            force: Aerodynamic force vector in wind frame [N]
-                - X_w: -drag
-                - Y_w: -side force (acts left for positive yaw)
-                - Z_w: 0 (no lift from rudders)
+        Returns
+        -------
+        ndarray (3,)
+            Wind-frame force [N] with:
+              - drag in -X_w
+              - side force in -Y_w (per your sign convention)
+              - no lift (Z component is zero)
         """
 
-        # === Aerodynamic coefficients ===
-        # You use a linearized side force model and a polynomial drag model.
-        CY = np.polyval(self.r_CY_c, angle)  # More accurate polynomial fit
-        CD = np.polyval(self.r_CD_c, angle * 40)  # Scaled input for polynomial domain
+        CY = np.polyval(self.r_CY_c, angle)
+        CD = np.polyval(self.r_CD_c, angle * 40)
 
-        # === Dynamic pressure ===
         q = 0.5 * self.rho * V**2
 
-        # === Forces in wind frame ===
-        lift = 0  # Rudders do not produce vertical lift (aligned with vertical fin)
-        drag = CD * q * self.r_surface * 2        # Total drag from both rudders
-        lateral = CY * q * self.r_surface * 2     # Lateral force causes yawing moment
+        drag = CD * q * self.r_surface * 2
+        lateral = CY * q * self.r_surface * 2
 
-        return np.array([
-            -drag,     # -X_w: drag opposes motion
-            -lateral,  # -Y_w: side force opposes yaw (standard sign convention)
-            -lift      # -Z_w: 0 here
-        ])
-    
+        return np.array([-drag, -lateral, 0.0])
+
     def Aerobrake(self, V, deploy):
-        # === Dynamic pressure ===
+        """
+        Aerobrake drag model.
+
+        Parameters
+        ----------
+        V : float
+            Airspeed magnitude [m/s]
+        deploy : float
+            Deployment factor (typically 0..1)
+
+        Returns
+        -------
+        ndarray (3,)
+            Drag force vector [N]. This model produces drag along the local X axis only.
+        """
+
         q = 0.5 * self.rho * V**2
         CD = self.aerobrake_CD * deploy
-
         drag = CD * q * self.aerobrake_surface
-
         return np.array([-drag, 0, 0])
 
     def body_to_vehicle(self, roll, pitch, yaw):
         """
-        Compute rotation matrix from body frame to world (vehicle/inertial) frame.
+        Body -> world rotation matrix.
 
-        This is the transpose (i.e., inverse) of the vehicle-to-body rotation matrix
-        since rotation matrices are orthonormal (R⁻¹ = Rᵀ).
+        This is computed as the transpose of vehicle_to_body because rotation
+        matrices are orthonormal (inverse equals transpose).
 
-        :param roll: Roll angle [rad]
-        :param pitch: Pitch angle [rad]
-        :param yaw: Yaw angle [rad]
-        :return: 3x3 rotation matrix (body → world)
+        Returns
+        -------
+        ndarray (3,3)
+            Rotation matrix mapping body-frame vectors into world frame.
         """
         return self.vehicle_to_body(roll, pitch, yaw).T
 
     def vehicle_to_body(self, roll, pitch, yaw):
         """
-        Compute rotation matrix from world (vehicle/inertial) frame to body frame.
+        World -> body rotation matrix using ZYX Euler convention (yaw, pitch, roll).
 
-        Rotation sequence follows aerospace convention: ZYX (yaw → pitch → roll)
-        - Rotate about Z (yaw), then Y (pitch), then X (roll)
+        Parameters
+        ----------
+        roll : float
+            Roll angle [rad]
+        pitch : float
+            Pitch angle [rad]
+        yaw : float
+            Yaw angle [rad]
 
-        :param roll: Roll angle [rad]
-        :param pitch: Pitch angle [rad]
-        :param yaw: Yaw angle [rad]
-        :return: 3x3 rotation matrix (world → body)
+        Returns
+        -------
+        ndarray (3,3)
+            Rotation matrix mapping world-frame vectors into body frame.
         """
 
-        # Trig shorthands
-        cr = np.cos(roll)
-        sr = np.sin(roll)
-        cp = np.cos(pitch)
-        sp = np.sin(pitch)
-        cy = np.cos(yaw)
-        sy = np.sin(yaw)
+        cr = np.cos(roll);  sr = np.sin(roll)
+        cp = np.cos(pitch); sp = np.sin(pitch)
+        cy = np.cos(yaw);   sy = np.sin(yaw)
 
-        # Construct ZYX rotation matrix
         R = np.array([
             [cp * cy, cp * sy, -sp],
             [sy * sp * cy - cr * sy, sr * sp * sy + cr * cy, sr * cp],
@@ -639,91 +791,79 @@ class FixedWingAircraft:
 
     def body_to_wind(self, AoA, sideslip):
         """
-        Compute the rotation matrix from the body frame to the wind frame.
+        Body -> wind rotation matrix.
 
-        The wind frame is aligned with the relative airflow:
-        - X_w: direction of incoming air (opposite to velocity vector)
-        - Y_w: lateral direction (perpendicular to X_w in horizontal plane)
-        - Z_w: completes right-handed system (typically points down if AoA > 0)
+        The wind frame is aligned with airflow direction:
+          - X_w aligned with relative wind direction
+          - Y_w lateral axis
+          - Z_w completes right-handed triad
 
-        :param AoA: Angle of Attack [rad]
-        :param sideslip: Sideslip angle [rad]
+        Parameters
+        ----------
+        AoA : float
+            Angle of attack [rad]
+        sideslip : float
+            Sideslip angle [rad]
 
-        :return: 3x3 rotation matrix R such that:
-                v_wind = R @ v_body
+        Returns
+        -------
+        ndarray (3,3)
+            Rotation matrix mapping body-frame vectors into wind frame.
         """
 
-        # === Trig shorthands ===
-        ca = np.cos(AoA)
-        sa = np.sin(AoA)
-        cb = np.cos(sideslip)
-        sb = np.sin(sideslip)
+        ca = np.cos(AoA);      sa = np.sin(AoA)
+        cb = np.cos(sideslip); sb = np.sin(sideslip)
 
-        # === Rotation matrix: Body → Wind ===
-        # This transforms a vector from body coordinates to wind-aligned coordinates.
-        # Order: sideslip (Y-axis), then angle of attack (Z-axis)
         R = np.array([
             [cb * ca, sb, cb * sa],
             [-sb * ca, cb, -sb * sa],
             [-sa,     0,   ca]
         ])
-
         return R
 
     def wind_to_body(self, AoA, sideslip):
         """
-        Compute the rotation matrix from the wind frame to the body frame.
+        Wind -> body rotation matrix.
 
-        This is the inverse of the body-to-wind transformation, and is used
-        to rotate aerodynamic force vectors (defined in wind coordinates)
-        into the aircraft body frame.
+        Because body_to_wind is a pure rotation, the inverse is the transpose.
 
-        :param AoA: Angle of Attack [rad]
-        :param sideslip: Sideslip angle [rad]
-
-        :return: 3x3 rotation matrix R such that:
-                v_body = R @ v_wind
+        Returns
+        -------
+        ndarray (3,3)
+            Rotation matrix mapping wind-frame vectors into body frame.
         """
-        R = self.body_to_wind(AoA, sideslip).T  # Inverse = transpose for rotation matrices
-        return R
+        return self.body_to_wind(AoA, sideslip).T
 
     def getTelemetry(self):
         """
-        Return the full telemetry dictionary collected during simulation.
+        Return collected telemetry.
 
-        :return: dict of lists containing logged state variables
+        Returns
+        -------
+        dict
+            Dictionary of lists: each key corresponds to a time history array.
         """
         return self.telemetry
 
     def get_absolute_velocity(self):
         """
-        Get the velocity vector in the world (inertial) frame by transforming
-        the body-frame velocity using the current orientation.
+        Convert current body-frame velocity into world-frame velocity.
 
-        :return: 3D velocity vector in inertial frame [m/s]
+        Returns
+        -------
+        ndarray (3,)
+            Velocity vector in world frame [m/s].
         """
-        absolute_vel = self.body_to_vehicle(self.o[0], self.o[1], self.o[2]) @ self.v
-        return absolute_vel
+        return self.body_to_vehicle(self.o[0], self.o[1], self.o[2]) @ self.v
 
     def get_pos(self):
         """
-        Get the current position of the aircraft in the world (inertial) frame.
+        Current world position.
 
-        :return: 3D position vector [m]
+        Returns
+        -------
+        ndarray (3,)
+            Position in world frame [m].
         """
         return self.p
-
-    def get_max_acc(self):
-        """
-        Estimate the maximum vertical acceleration (approximate lift limit)
-        at 35° angle of attack and current speed.
-
-        Used to determine acceleration limits for physics capping or safety checks.
-
-        :return: Max lift-based acceleration in +Z_body direction [m/s²]
-        """
-        V = np.linalg.norm(self.v)  # Airspeed magnitude
-        _, _, lift = self.Airframe(np.deg2rad(35), 0, V)  # Max lift estimate at AoA = 35°
-        return -lift / self.m  # Acceleration = Force / Mass, sign reflects body-frame axis
-
 

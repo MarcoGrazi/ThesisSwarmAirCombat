@@ -1,574 +1,309 @@
-{ 'alg_config':
-  {
-    "WANDB_API_KEY": "1b8b77cc6fc3631890702b9ecbfed2fdc1551347",
-    'artifacts_folder': 'Training_Runs',
-    'run_name':'FinalTrain_SelfPlay_2v2',
-    
-    # Here if you specify just one checkpoint or none, you will train a policy from scratch or from that checkpoint. 
-    # (remember to set dummy parameters and policies to train)
-    # If you specify multiple checkpoints, they will be used for self-play training. 
-    # (remember to disable dummy and set policies to train, do not include team_0 as it is the non-learning winner position)
-    'initial_checkpoints': ['Best_C14/team_0/1', 'Best_C04/team_0/4', 'Best_C34/team_0/5'],  
-    'policies_to_train': ['team_0', 'team_1'],
-    'fcnet_hiddens': [256],
-    'fcnet_activation': ['relu'],
-    'actor_learning_rate': [0.00003],
-    'critic_learning_rate': [0.0003],
-    'entropy_learning_rate': [0.0003],
-    'initial_alpha': [1],
-    'tau': [0.005],
-    'replay_buffer_capacity': [500000],
-    'num_env_runners': 23,
-    'num_envs_per_env_runner': 1,
-    'num_cpus_per_env_runner': 1,
-    'num_gpus_per_env_runner': 0,
-    'batch_mode': "truncate_episodes",
-    'sample_timeout_s': 120,
-    'batch_size_per_learner': [1200],
-    'gamma': [0.99],
-    'train_iterations': 100000,
-    'checkpoint_freq': 10000,
-    'checkpoint_length': 3000, #3000/10 = 300/60 = 5 minutes
-    'num_evaluation_episodes': 15,
-},
-# This table shows the approximate number of matches needed
-# for TrueSkill to converge (μ and σ stabilize), depending
-# on the number of players/teams involved in each game.
-#
-#   Rule                | Matches Needed
-#   --------------------+----------------
-#   16-player FFA       |        3
-#   8-player FFA        |        3
-#   4-player FFA        |        5
-#   2-player FFA (1v1)  |       12
-#   2:2:2:2 teams       |       10
-#   4:4:4:4 teams       |       20
-#   4v4                 |       46
-#   8v8                 |       91
-# use this info to set num_evaluation episodes depending on how many players and teams are used
+alg_config:
+  WANDB_API_KEY: "1b8b77cc6fc3631890702b9ecbfed2fdc1551347"          # W&B API key used to log runs. Consider using env vars instead of committing this.
+  artifacts_folder: Training_Runs  # Where to save checkpoints, plots, configs, etc.
+  run_name: FinalTrain_Pursuit_C04 # Human-readable run identifier for logging and artifact grouping.
+
+# Self-play / initialization logic:
+  # - If empty or one checkpoint: train from scratch or resume from that checkpoint.
+  # - If multiple checkpoints: use them as opponents for self-play initialization / league-style training.
+  initial_checkpoints:
+    - Best_C03/team_0/0
+    # Path format:
+    #   <checkpoint_name>/<policy_id>/<plane_model>
+    #
+    # This tells the trainer to load a policy from a checkpoint directory
+    # located in the current working directory.
+    #
+    # Example:
+    #   Best_C03/team_0/0
+    #   └─ Best_C03           → checkpoint folder name
+    #      └─ team_0          → policy ID inside the checkpoint
+    #         └─ 0            → aircraft (plane) model index
+    #
+    # The specified policy weights are loaded at initialization and assigned
+    # to the corresponding team/policy before training starts.
+    #
+    # --- Self-play / league training convention ---
+    # In self-play leagues, opponent policies are imported and exported
+    # as standalone weight files using a naming scheme:
+    #
+    #   <original_checkpoint>_round<P>_plane<M>
+    #
+    # where:
+    #   P = self-play round or generation index
+    #   M = aircraft (plane) model index
+    #
+    # This allows:
+    # - Freezing past policies as fixed opponents
+    # - Mixing opponents trained on different aircraft models
+    # - Reproducible league progression across training runs
+
+  # Which policy IDs are allowed to update during training.
+  # (Important when you have league/self-play: you might freeze some opponents.)
+  policies_to_train: [team_0, team_1]
+
+  # Network architecture for policy/value networks.
+  fcnet_hiddens: [256]        # MLP hidden layer sizes. Here: single hidden layer of 256.
+  fcnet_activation: [relu]    # Activation function for the MLP.
+
+  # Learning rates (these look like SAC-style: separate actor/critic + entropy/alpha schedule).
+  actor_learning_rate:  [0.00003]
+  critic_learning_rate: [0.0003]
+  entropy_learning_rate: [0.0003]
+  initial_alpha: [1]          # Initial entropy temperature (SAC). Higher => more exploration initially.
+  tau: [0.005]                # Target network soft-update coefficient (SAC/DDPG-style).
+
+  replay_buffer_capacity: [500000]  # Experience replay size (off-policy buffer).
+  num_env_runners: 23               # Parallel rollout workers.
+  num_envs_per_env_runner: 1        # How many env copies each worker runs.
+  num_cpus_per_env_runner: 1
+  num_gpus_per_env_runner: 0
+
+  batch_mode: truncate_episodes      # Collect fixed-length fragments (good for long episodes).
+  sample_timeout_s: 120             # Max time to wait for sampling results before timing out.
+  batch_size_per_learner: [1200]    # How much experience per training iteration (per learner).
+  gamma: [0.99]                     # Discount factor.
+
+  train_iterations: 20000           # Total training iterations (outer loop iterations).
+  checkpoint_freq: 1000            # Save checkpoint every N training iterations.
+  checkpoint_length: 3000          # Your note: with action_freq=10 => 3000 steps ~ 5 minutes sim time.
+  num_evaluation_episodes: 15       # Episodes to evaluate policy strength (see TrueSkill note below).
+
+  # Note: The comment table below is about TrueSkill convergence speed.
+  # If you're using TrueSkill to rank policies, the eval episode count should scale with
+  # "how many participants in each match" and how noisy your outcomes are:
+
+  # --- TrueSkill rule-of-thumb: matches needed to stabilize μ/σ ---
+  # Players/teams per match      | Matches needed (approx)
+  # ----------------------------+--------------------------
+  # 16-player FFA               | 3
+  # 8-player FFA                | 3
+  # 4-player FFA                | 5
+  # 1v1 (2-player FFA)          | 12
+  # 2:2:2:2 (4 teams)           | 10
+  # 4:4:4:4 (4 teams)           | 20
+  # 4v4                         | 46
+  # 8v8                         | 91
+  #
+  # Use this to pick num_evaluation_episodes based on match size and outcome noise.
 
 
-  'env_config' :
-    {
-      'rho' : 1.239,
-      'g' : 9.81,
-      'physics_frequency': 120,
-      'action_frequency': 10,
-      'max_episode_length': 6000, #6000/10 = 600/60 = 10 minutes
-      'team_number': 2,
-      'agent_number_team': 3,
-      'agent_report_name': 'none',
-      'plane_model': [0, 0],  # Select UAV model if the training does not start from an initial checkpoint
-      'stepwise_tone_increment':0.01,
-      'tone_threshold':0.5,
-      'autotrigger': False,
-      'trigger_threshold': 0.8,
-      'min_bases_distance': 10000,
-      'env_size':[15000, 15000, 10000],
-      'max_size': 30000,
-      'collision_distance': 30,
-      'dummy': 'none', # 'none', 'line', 'curve', 'mixed', 'random'
-      'change_speed': True, 
-      'random_change_period_options': [100, 150, 200],
-      'dummy_turn_options': [1000, 2000, 4000, 6000], 
-      'dummy_dir_options': [1, -1],
-      'dummy_speed_options': [0, 0, 25, -25, 50, -50],
-      'dummy_kill': True,
-      'alive_agents_start': 2,
-      'speed_step': 0.01,
-      'UpAngle_step': 0.001,
-      'SideAngle_step': 0.001,
-      'screen_size' : [800, 800],
-      'spawning_distance': 5000,
-      'spawning_orientations': [[0, 10, -10], [0, 90, -90, 180]],
-      'spawning_speeds': [120, 140, 160, 180, 200, 220, 250],
-      'spawning_random': True,
-      'initial_multi_offset': 60,
-      'reward_versions': {
-            1: {
-                'GFW': 0.2,   # Flight Reward Weight
-                'PW': 0.8,    # Pursuit Reward Weight
-                'CW': 0.8,
-                'AW': 0.2,
-                'AoA_W': 0.0,
-                'Sideslip_W': 0.0,
-                'Speed_W': 0.4,
-                'Altitude_W': 0.3,
-                'Smoothing_W': 0.3,
-                'Critical_AoA': 35,
-                'Terminal_AoA': 70,
-                'Critical_Sideslip': 35,
-                'Terminal_Sideslip': 70,
-                'Critical_Speed': 150.0,
-                'Terminal_Speed': 50.0,
-                'Critical_Altitude': 2000,
-                'Critical_Delta': 0.1,
-                'optimal_zone': 1000,
-                'att_tone_bonus': 0.5,
-                'def_tone_bonus': 10,
-                'trigger_penalty': 0.2,
-                'kill_bonus': 250,
-                'terminal_penalty': 1000,
-                'tan_parameter':3,  # linear for tan_parameter=5, sparse for tan_parameter=2
-            },
-        }
-    },
+env_config:
+  rho: 1.239
+  g: 9.81
 
-  'uav_config' :
-    {0:  # UAV Model 0
-       {
-       'mass': 5000,
-       'max_speed':343, #speed of sound (after this the aero model is not realistic anymore)
-       'max_acc': 20,
-       'max_thrust': 60000,
-       'attack_cone': [120, 1000, 5000],
-       'defence_cone': [200, 1000, 5000],
-       'bounding_box': [9.4, 8, 1.4],
-       'inertia_tensor':
-         [ [6.817e3, 0, 0 ],
-           [0, 3.551e4, 0],
-           [0, 0, 4.151e4]],
-         #[[6.817e3,1.924e-1, 1.671e2],
-         # [1.924e-1,3,551e4,4.791e2],
-         # [1.671e2,-2.288e-3,4.151e4]],
+  physics_frequency: 120   # Hz. Physics integration tick rate (FixedWingAircraft dt = 1/120).
+  action_frequency: 10     # Hz. RL/control action is held for 12 physics ticks (120/10).
 
-       'aerobrake_CD': 0.4,
-       'aerobrake_surface': 3,
-       'airframe':
-         {
-           'coefficients':
-             {
-               'front' : {
-                           'lift': [-0.0000033911279, -0.0000178357992, 0.0128228674137, 0.031668845813],
-                           'drag': [0.0001452967676, 0.0000783996205, 0.01],
-               },
-               'side': {
-                         'lateral':[-0.0000003732703, 0, 0.001555689069, 0],
-                         'drag':[0.0000164511278, 0, 0.0208105263158],
-               },
-             },
-           'COF' : [-0.3, 0, 0],
-           'surface': 88.58,
-       },
+  max_episode_length: 6000 # In env "steps" (action steps). With 10 Hz => 600 seconds (10 minutes).
 
-       'aleiron':
-         {
-           'coefficients': {
-             'lift': [ 0.5, 0],
-             'drag': [ 0.0000001361, 0.000056624, -0.0004479701, 0.01 ],
-           },
-           'COF': [ -2, 3, 0 ],
-           'surface': 2,
-         },
+  team_number: 2
+  agent_number_team: 3     # Total aircraft = 2 * 3 = 6 in the arena.
 
-       'elevons': {
-         'coefficients': {
-           'lift': [0.6, 0],
-           'drag': [0.0002803707, 0.0002215203, 0.01],
-         },
-         'COF': [-3.65,0,0],
-         'surface':  6,
-       },
+  agent_report_name: none  # Used for logging/reporting (your code checks this in some places).
 
-       'rudders': {
-         'coefficients': {
-           'lateral': [0.2, 0],
-           'drag': [-0.0001966466, 0, 0.01],
-         },
-         'COF': [ -3, 0, 0 ],
-         'surface': 4,
-        },
-       "gains": {
-            'AoA':      {'kp': 1.2, 'ki': 0, 'kd': 0.8},   # Angle of Attack control
-            'sideslip': {'kp': 5, 'ki': 0.1, 'kd': 1.2},   # Lateral balance / sideslip
-            'roll':     {'kp': 5, 'ki': 0.1, 'kd': 1.0},   # Roll angle control
-            'speed':    {'kp': 20, 'ki': 0.8, 'kd': 0.0}   # Throttle/speed regulation
-        },
-        'rate_limits': {
-          'elevator': 20,
-          'aileron': 20,
-          'rudder': 20,
-          'throttle': 20,
-        }
-  },
+  plane_model: [0, 0]      # Per-team default aircraft model ID. If using checkpoints, models may be overridden.
 
-  1: # UAV Model 1
-       {
-       'mass': 6000,
-       'max_speed':343, #speed of sound (after this the aero model is not realistic anymore)
-       'max_acc': 20,
-       'max_thrust': 120000,
-       'attack_cone': [120, 1000, 5000],
-       'defence_cone': [200, 1000, 5000],
-       'bounding_box': [8.1, 6.3, 1.6],
-       'inertia_tensor':
-         [ [1.9e4, 0, 0 ],
-           [0, 1.9e4, 0],
-           [0, 0, 2.2e4]],
+  # Missile tone dynamics:
+  stepwise_tone_increment: 0.01  # Tone increases by this per env step while target remains in cone.
+  tone_threshold: 0.5            # Minimum lock tone required to allow firing.
+  autotrigger: False             # If True, fire automatically (no action[-1] required).
+  trigger_threshold: 0.8         # If action[-1] > this => attempt fire.
 
-       'aerobrake_CD': 0.4,
-       'aerobrake_surface': 3,
-       'airframe':
-         {
-           'coefficients':
-             {
-               'front' : {
-                           'lift': [0.0000000256139, -0.0000046341745, -0.000085684744, 0.0234959244665, 0.0369768735596],
-                           'drag': [-0.00000000754,-0.0000003855746, 0.0001404192042, 0.0011983067446, 0.0051677757234],
-               },
-               'side': {
-                         'lateral':[-0.00000037, 0.0025],
-                         'drag':[0.0000164511278, 0, 0.0208105263158],
-               },
-             },
-           'COF' : [-0.05, 0, 0],
-           'surface': 118,
+  # World geometry / safety:
+  min_bases_distance: 10000
+  env_size: [15000, 15000, 10000]  # X, Y, Z-size. Your convention seems Z+ down.
+  max_size: 30000                  # Used for normalization / bounds checks (centroid distance).
+  collision_distance: 30           # Collision threshold between aircraft.
 
-       },
+  # Dummy aircraft behavior:
+  dummy: random                     # Enables one scripted agent (or more depending on your logic).
+  change_speed: True
+  random_change_period_options: [100, 150, 200]  # In *action steps* (then multiplied inside your dummy logic).
+  dummy_turn_options: [1000, 2000, 4000, 6000]   # Turn radii for dummy curve.
+  dummy_dir_options: [1, -1]                     # Left/right.
+  dummy_speed_options: [0, 0, 25, -25, 50, -50]  # Speed perturbations.
+  dummy_kill: True                               # If dummy aircraft fires automatically.
 
-       'aleiron':
-         {
-           'coefficients': {
-             'lift': [ 0.6, 0],
-             'drag': [ 0.0000001361, 0.000056624, -0.0004479701, 0.01 ],
-           },
-           'COF': [ 2, 1.5, 0 ],
-           'surface': 5,
-         },
+  alive_agents_start: 1     # Per team: how many aircraft start alive (your reset logic makes this per-team).
 
-       'elevons': {
-         'coefficients': {
-           'lift': [0.6, 0],
-           'drag': [0.0002803707, 0.0002215203, 0.01],
-         },
-         'COF': [2,0,0],
-         'surface':  -5,
-       },
+  # Action discretization resolution:
+  speed_step: 0.01
+  UpAngle_step: 0.001
+  SideAngle_step: 0.001
 
-       'rudders': {
-         'coefficients': {
-           'lateral': [0.2, 0],
-           'drag': [-0.0001966466, 0, 0.01],
-         },
-         'COF': [ -2.5, 0, 0 ],
-         'surface': 5,
-        },
-       "gains": {
-            'AoA':      {'kp': 1.2, 'ki': 0, 'kd': 0.8},   # Angle of Attack control
-            'sideslip': {'kp': 3, 'ki': 0.1, 'kd': 0.8},   # Lateral balance / sideslip
-            'roll':     {'kp': 3, 'ki': 0.1, 'kd': 0.8},   # Roll angle control
-            'speed':    {'kp': 20, 'ki': 0.8, 'kd': 0.0}   # Throttle/speed regulation
-        },
-        'rate_limits': {
-          'elevator': 20,
-          'aileron': 20,
-          'rudder': 20,
-          'throttle': 20,
-        }
-  },
+  screen_size: [800, 800]
 
-  2:  # UAV Model 2 (derived from Model 0) # shorter wingspan, less mass and inertia
-       {
-       'mass': 4000, #-1000
-       'max_speed':343, #speed of sound (after this the aero model is not realistic anymore)
-       'max_acc': 20,
-       'max_thrust': 60000,
-       'attack_cone': [120, 1000, 5000],
-       'defence_cone': [200, 1000, 5000],
-       'bounding_box': [9.4, 8, 1.4],
-       'inertia_tensor':
-         [ [5.8e3, 0, 0 ], # -1
-           [0, 3e4, 0],  #-0,5
-           [0, 0, 3.5e4]], #-0.6
-         #[[6.817e3,1.924e-1, 1.671e2],
-         # [1.924e-1,3,551e4,4.791e2],
-         # [1.671e2,-2.288e-3,4.151e4]],
+  # Spawn logic:
+  spawning_distance: 5000
+  spawning_orientations:
+    - [0, 10, -10]              # discrete pitch options (deg)
+    - [0, 90, -90, 180]         # yaw offsets (deg)
+  spawning_speeds: [120, 140, 160, 180, 200, 220, 250]
+  spawning_random: True
+  initial_multi_offset: 60      # Used to spread multiple same-team aircraft around a base.
 
-       'aerobrake_CD': 0.4,
-       'aerobrake_surface': 3,
-       'airframe':
-         {
-           'coefficients':
-             {
-               'front' : {
-                           'lift': [-0.0000033911279, -0.0000178357992, 0.0128228674137, 0.031668845813],
-                           'drag': [0.0001452967676, 0.0000783996205, 0.01],
-               },
-               'side': {
-                         'lateral':[-0.0000003732703, 0, 0.001555689069, 0],
-                         'drag':[0.0000164511278, 0, 0.0208105263158],
-               },
-             },
-           'COF' : [-0.3, 0, 0],
-           'surface': 75,
-       },
+  reward_versions:
+    1:
+      # Overall mixing weights:
+      GFW: 0.2   # Global Flight Weight (flight safety / stability shaping)
+      PW: 0.8    # Pursuit Weight (tactics shaping)
 
-       'aleiron':
-         {
-           'coefficients': {
-             'lift': [ 0.5, 0],
-             'drag': [ 0.0000001361, 0.000056624, -0.0004479701, 0.01 ],
-           },
-           'COF': [ -2, 3, 0 ],
-           'surface': 2,
-         },
+      # Subweights inside pursuit shaping:
+      CW: 0.8    # Closure weight
+      AW: 0.2    # Angle advantage weight
 
-       'elevons': {
-         'coefficients': {
-           'lift': [0.6, 0],
-           'drag': [0.0002803707, 0.0002215203, 0.01],
-         },
-         'COF': [-3.65,0,0],
-         'surface':  6,
-       },
+      # Flight penalty weights (your current config disables AoA/sideslip penalties):
+      AoA_W: 0.0
+      Sideslip_W: 0.0
+      Speed_W: 0.4
+      Altitude_W: 0.3
+      Smoothing_W: 0.3
 
-       'rudders': {
-         'coefficients': {
-           'lateral': [0.2, 0],
-           'drag': [-0.0001966466, 0, 0.01],
-         },
-         'COF': [ -3, 0, 0 ],
-         'surface': 4,
-        },
-       "gains": {
-            'AoA':      {'kp': 1, 'ki': 0, 'kd': 0.4},   # Angle of Attack control
-            'sideslip': {'kp': 5, 'ki': 0.1, 'kd': 1.2},   # Lateral balance / sideslip
-            'roll':     {'kp': 5, 'ki': 0.1, 'kd': 1.0},   # Roll angle control
-            'speed':    {'kp': 20, 'ki': 0.8, 'kd': 0.0}   # Throttle/speed regulation
-        },
-        'rate_limits': {
-          'elevator': 20,
-          'aileron': 20,
-          'rudder': 20,
-          'throttle': 20,
-        }
-  },
+      # Safety thresholds used by logistic shaping and termination checks:
+      Critical_AoA: 15
+      Terminal_AoA: 40
+      Critical_Sideslip: 15
+      Terminal_Sideslip: 40
+      Critical_Speed: 150.0
+      Terminal_Speed: 50.0
+      Critical_Altitude: 2000
+      Critical_Delta: 0.1
 
-  3: # UAV Model 3 (derived from Model 1) # faster response PID, shorter wingspan with less inertia and mass
-       {
-       'mass': 5000, # -1000
-       'max_speed':343, #speed of sound (after this the aero model is not realistic anymore)
-       'max_acc': 20,
-       'max_thrust': 120000,
-       'attack_cone': [120, 1000, 5000],
-       'defence_cone': [200, 1000, 5000],
-       'bounding_box': [8.1, 6.3, 1.6],
-       'inertia_tensor':
-         [ [1.5e4, 0, 0 ], # -0.4
-           [0, 1.5e4, 0], # -0.4
-           [0, 0, 1.7e4]], # -0.5
+      # Pursuit geometry shaping:
+      optimal_zone: 1000             # width around optimal distance where closure reward is shaped
+      att_tone_bonus: 0.5            # sparse-ish bonus tied to attack tone / engagement
+      def_tone_bonus: 10             # penalty tied to defensive tone
+      trigger_penalty: 0.2           # penalize poor/early trigger usage
 
-       'aerobrake_CD': 0.4,
-       'aerobrake_surface': 3,
-       'airframe':
-         {
-           'coefficients':
-             {
-               'front' : {
-                           'lift': [0.0000000256139, -0.0000046341745, -0.000085684744, 0.0234959244665, 0.0369768735596],
-                           'drag': [-0.00000000754,-0.0000003855746, 0.0001404192042, 0.0011983067446, 0.0051677757234],
-               },
-               'side': {
-                         'lateral':[-0.00000037, 0.0025],
-                         'drag':[0.0000164511278, 0, 0.0208105263158],
-               },
-             },
-           'COF' : [-0.05, 0, 0],
-           'surface': 100, # -18
+      # Sparse events:
+      kill_bonus: 250
+      terminal_penalty: 1000
+      killed_penalty: 500
 
-       },
+      tan_parameter: 3               # controls how sharp pursuit angle shaping is (smaller => spikier)
 
-       'aleiron':
-         {
-           'coefficients': {
-             'lift': [ 0.6, 0],
-             'drag': [ 0.0000001361, 0.000056624, -0.0004479701, 0.01 ],
-           },
-           'COF': [ 2, 1.5, 0 ],
-           'surface': 5,
-         },
+uav_config:
+  0:
+    # "Model 0": heavier airframe, moderate thrust, larger wing surface.
+    mass: 5000
+    max_speed: 343          # cap at speed of sound (used for clipping + normalization)
+    max_acc: 20             # acceleration cap (in g units in your physics code)
+    max_thrust: 60000
 
-       'elevons': {
-         'coefficients': {
-           'lift': [0.6, 0],
-           'drag': [0.0002803707, 0.0002215203, 0.01],
-         },
-         'COF': [2,0,0],
-         'surface':  -5,
-       },
+    # Engagement geometry (degrees, meters):
+    attack_cone:  [120, 1000, 5000]  # forward cone: [full_angle_deg, min_dist, max_dist]
+    defence_cone: [200, 1000, 5000]  # rear vulnerability cone: typically wider than attack
 
-       'rudders': {
-         'coefficients': {
-           'lateral': [0.2, 0],
-           'drag': [-0.0001966466, 0, 0.01],
-         },
-         'COF': [ -2.5, 0, 0 ],
-         'surface': 5,
-        },
-       "gains": {
-            'AoA':      {'kp': 0.8, 'ki': 0, 'kd': 0.3},   # Angle of Attack control #modified for faster control in relation to Model 1
-            'sideslip': {'kp': 3, 'ki': 0.1, 'kd': 0.8},   # Lateral balance / sideslip
-            'roll':     {'kp': 3, 'ki': 0.1, 'kd': 0.8},   # Roll angle control
-            'speed':    {'kp': 20, 'ki': 0.8, 'kd': 0.0}   # Throttle/speed regulation
-        },
-        'rate_limits': {
-          'elevator': 20,
-          'aileron': 20,
-          'rudder': 20,
-          'throttle': 20,
-        }
-  },
+    bounding_box: [9.4, 8, 1.4]      # used for collision/physics (not currently used everywhere)
 
-  4:  # UAV Model 4 (derived from Model 0) # higher thrust-to-weight ratio and lower vulnerability
-       {
-       'mass': 5000,
-       'max_speed':343, #speed of sound (after this the aero model is not realistic anymore)
-       'max_acc': 20,
-       'max_thrust': 80000, # +20000
-       'attack_cone': [120, 1000, 5000],
-       'defence_cone': [140, 1000, 5000], # engine shrouds for lower vulnerable angle
-       'bounding_box': [9.4, 8, 1.4],
-       'inertia_tensor':
-         [ [6.817e3, 0, 0 ],
-           [0, 3.551e4, 0],
-           [0, 0, 4.151e4]],
-         #[[6.817e3,1.924e-1, 1.671e2],
-         # [1.924e-1,3,551e4,4.791e2],
-         # [1.671e2,-2.288e-3,4.151e4]],
+    inertia_tensor:
+      - [6817, 0, 0]
+      - [0, 35510, 0]
+      - [0, 0, 41510]
 
-       'aerobrake_CD': 0.4,
-       'aerobrake_surface': 3,
-       'airframe':
-         {
-           'coefficients':
-             {
-               'front' : {
-                           'lift': [-0.0000033911279, -0.0000178357992, 0.0128228674137, 0.031668845813],
-                           'drag': [0.0001452967676, 0.0000783996205, 0.01],
-               },
-               'side': {
-                         'lateral':[-0.0000003732703, 0, 0.001555689069, 0],
-                         'drag':[0.0000164511278, 0, 0.0208105263158],
-               },
-             },
-           'COF' : [-0.3, 0, 0],
-           'surface': 88.58,
-       },
+    aerobrake_CD: 0.4
+    aerobrake_surface: 3
 
-       'aleiron':
-         {
-           'coefficients': {
-             'lift': [ 0.5, 0],
-             'drag': [ 0.0000001361, 0.000056624, -0.0004479701, 0.01 ],
-           },
-           'COF': [ -2, 3, 0 ],
-           'surface': 2,
-         },
+    airframe:
+      coefficients:
+        front:
+          lift: [-3.3911279e-6, -1.78357992e-5, 0.0128228674137, 0.031668845813]
+          drag: [1.452967676e-4, 7.83996205e-5, 0.01]
+        side:
+          lateral: [-3.732703e-7, 0, 0.001555689069, 0]
+          drag:    [1.64511278e-5, 0, 0.0208105263158]
+      COF: [-0.3, 0, 0]      # center-of-force offset (meters) for moment arm cross product
+      surface: 88.58         # reference area (m^2)
 
-       'elevons': {
-         'coefficients': {
-           'lift': [0.6, 0],
-           'drag': [0.0002803707, 0.0002215203, 0.01],
-         },
-         'COF': [-3.65,0,0],
-         'surface':  6,
-       },
+    aleiron:
+      coefficients:
+        lift: [0.5, 0]       # CL ~ 0.5*angle + 0 (depending on how you interpret units)
+        drag: [1.361e-7, 5.6624e-5, -4.479701e-4, 0.01]
+      COF: [-2, 3, 0]
+      surface: 2
 
-       'rudders': {
-         'coefficients': {
-           'lateral': [0.2, 0],
-           'drag': [-0.0001966466, 0, 0.01],
-         },
-         'COF': [ -3, 0, 0 ],
-         'surface': 4,
-        },
-       "gains": {
-            'AoA':      {'kp': 1.2, 'ki': 0, 'kd': 0.8},   # Angle of Attack control
-            'sideslip': {'kp': 5, 'ki': 0.1, 'kd': 1.2},   # Lateral balance / sideslip
-            'roll':     {'kp': 5, 'ki': 0.1, 'kd': 1.0},   # Roll angle control
-            'speed':    {'kp': 20, 'ki': 0.8, 'kd': 0.0}   # Throttle/speed regulation
-        },
-        'rate_limits': {
-          'elevator': 20,
-          'aileron': 20,
-          'rudder': 20,
-          'throttle': 20,
-        }
-  },
+    elevons:
+      coefficients:
+        lift: [0.6, 0]
+        drag: [2.803707e-4, 2.215203e-4, 0.01]
+      COF: [-3.65, 0, 0]
+      surface: 6
 
-  5: # UAV Model 5 (derived from Model 1) # higher thrust-to-weight ratio and lower vulnerability
-       {
-       'mass': 6000,
-       'max_speed':343, #speed of sound (after this the aero model is not realistic anymore)
-       'max_acc': 20,
-       'max_thrust': 140000, # +20000
-       'attack_cone': [120, 1000, 5000],
-       'defence_cone': [140, 1000, 5000], # engine shrouds for lower vulnerable angle
-       'bounding_box': [8.1, 6.3, 1.6],
-       'inertia_tensor':
-         [ [1.9e4, 0, 0 ],
-           [0, 1.9e4, 0],
-           [0, 0, 2.2e4]],
+    rudders:
+      coefficients:
+        lateral: [0.2, 0]
+        drag: [-1.966466e-4, 0, 0.01]
+      COF: [-3, 0, 0]
+      surface: 4
 
-       'aerobrake_CD': 0.4,
-       'aerobrake_surface': 3,
-       'airframe':
-         {
-           'coefficients':
-             {
-               'front' : {
-                           'lift': [0.0000000256139, -0.0000046341745, -0.000085684744, 0.0234959244665, 0.0369768735596],
-                           'drag': [-0.00000000754,-0.0000003855746, 0.0001404192042, 0.0011983067446, 0.0051677757234],
-               },
-               'side': {
-                         'lateral':[-0.00000037, 0.0025],
-                         'drag':[0.0000164511278, 0, 0.0208105263158],
-               },
-             },
-           'COF' : [-0.05, 0, 0],
-           'surface': 118,
+    gains:
+      # PID loops inside Aircraft.PID_Control (AoA, sideslip, roll, speed)
+      AoA:      {kp: 1.2, ki: 0,   kd: 0.8}
+      sideslip: {kp: 5,   ki: 0.1, kd: 1.2}
+      roll:     {kp: 5,   ki: 0.1, kd: 1.0}
+      speed:    {kp: 20,  ki: 0.8, kd: 0.0}
 
-       },
+    rate_limits:
+      # Max slew rate in "normalized command units per second" (per your rate_limit implementation).
+      elevator: 20
+      aileron: 20
+      rudder: 20
+      throttle: 20
 
-       'aleiron':
-         {
-           'coefficients': {
-             'lift': [ 0.6, 0],
-             'drag': [ 0.0000001361, 0.000056624, -0.0004479701, 0.01 ],
-           },
-           'COF': [ 2, 1.5, 0 ],
-           'surface': 5,
-         },
+  1:
+    # "Model 1": higher thrust, different inertias and aero coefficients.
+    mass: 6000
+    max_speed: 343
+    max_acc: 20
+    max_thrust: 120000
+    attack_cone:  [120, 1000, 5000]
+    defence_cone: [200, 1000, 5000]
+    bounding_box: [8.1, 6.3, 1.6]
+    inertia_tensor:
+      - [19000, 0, 0]
+      - [0, 19000, 0]
+      - [0, 0, 22000]
+    aerobrake_CD: 0.4
+    aerobrake_surface: 3
+    airframe:
+      coefficients:
+        front:
+          lift: [2.56139e-8, -4.6341745e-6, -8.5684744e-5, 0.0234959244665, 0.0369768735596]
+          drag: [-7.54e-9, -3.855746e-7, 1.404192042e-4, 0.0011983067446, 0.0051677757234]
+        side:
+          lateral: [-3.7e-7, 0.0025]
+          drag: [1.64511278e-5, 0, 0.0208105263158]
+      COF: [-0.05, 0, 0]
+      surface: 118
 
-       'elevons': {
-         'coefficients': {
-           'lift': [0.6, 0],
-           'drag': [0.0002803707, 0.0002215203, 0.01],
-         },
-         'COF': [2,0,0],
-         'surface':  -5,
-       },
+    # Control surface geometry and coefficients...
+    # (Same interpretation as model 0, but different surfaces/COF/areas.)
+    aleiron: { ... }
+    elevons: { ... }
+    rudders: { ... }
 
-       'rudders': {
-         'coefficients': {
-           'lateral': [0.2, 0],
-           'drag': [-0.0001966466, 0, 0.01],
-         },
-         'COF': [ -2.5, 0, 0 ],
-         'surface': 5,
-        },
-       "gains": {
-            'AoA':      {'kp': 1.2, 'ki': 0, 'kd': 0.8},   # Angle of Attack control
-            'sideslip': {'kp': 3, 'ki': 0.1, 'kd': 0.8},   # Lateral balance / sideslip
-            'roll':     {'kp': 3, 'ki': 0.1, 'kd': 0.8},   # Roll angle control
-            'speed':    {'kp': 20, 'ki': 0.8, 'kd': 0.0}   # Throttle/speed regulation
-        },
-        'rate_limits': {
-          'elevator': 20,
-          'aileron': 20,
-          'rudder': 20,
-          'throttle': 20,
-        }
-  },
-  }
-}
+    gains:
+      AoA:      {kp: 1.2, ki: 0,   kd: 0.8}
+      sideslip: {kp: 3,   ki: 0.1, kd: 0.8}
+      roll:     {kp: 3,   ki: 0.1, kd: 0.8}
+      speed:    {kp: 20,  ki: 0.8, kd: 0.0}
+
+    rate_limits: { elevator: 20, aileron: 20, rudder: 20, throttle: 20 }
+
+  2:
+    # "Model 2": derived from model 0 — lighter, reduced reference area, reduced inertia.
+    # Idea: more agile / less lift and mass.
+    ...
+
+  3:
+    # "Model 3": derived from model 1 — lighter, reduced inertia, faster PID response.
+    ...
+
+  4:
+    # "Model 4": derived from model 0 — higher thrust-to-weight and smaller defence cone (less vulnerable).
+    ...
+
+  5:
+    # "Model 5": derived from model 1 — higher thrust-to-weight and smaller defence cone (less vulnerable).
+    ...
