@@ -21,10 +21,10 @@ Basic set up:
 Different types of training can be run on this system:
 - 1 vs dummy: ensure you specify 1 or none starting checkpoints, alive_agents_start = 1 and dummy settings are not 'none'
 - 1 vs 1: just disable dummy settings by putting dummy_type = 'none'. You can choose to train both team's policy or just one: policies_to_train = ['team_0', 'team_1']
-- 1 vs 1 Tournament: put multiple starting checkpoints in initial_checkpoints, this will start a self-play tournament. make sure to check train_iteration and checkpoint_freq since this will determine after how many iterations you have an evaluation round, and how many there will be in the whole run. Also make sure to check num_evaluation_episodes is set according to the TrueSkill reference table
-- 2 vs 2 (1 agent, 1 dummy): as a result of how the code is structured there is this possibility. from 1vs dummy set up, just set alive_agents_start = 2
+- 1 vs 1 Tournament: put multiple starting checkpoints in initial_checkpoints, this will start a self-play tournament. Make sure to check train_iteration and checkpoint_freq since this will determine after how many iterations you have an evaluation round, and how many there will be in the whole run. Also make sure to check num_evaluation_episodes is set according to the TrueSkill reference table
+- 2 vs 2 (1 agent, 1 dummy): as a result of how the code is structured there is this possibility. From 1vs dummy set up, just set alive_agents_start = 2
 - 2 vs 2: 1 vs 1 with alive agents_start = 2
-- n vs n Tournament: basically 1 vs 1 tournament with alive_agents_start=n. Be careful though, agent_number_team must be >= n. also consider that if the loaded checkpoints were trained with agent_number_team != current agent_number_team the observation spaces will not match and thus it will be impossible to run the experiment
+- n vs n Tournament: basically 1 vs 1 tournament with alive_agents_start=n. Be careful though, agent_number_team must be >= n. Also consider that if the loaded checkpoints were trained with agent_number_team != current agent_number_team the observation spaces will not match, and thus it will be impossible to run the experiment
 - n vs n vs n: by setting team_number > 2 we can model scenarios with more than 2 competing teams.
    
 ## Key Capabilities
