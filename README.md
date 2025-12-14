@@ -16,7 +16,7 @@ Rather than treating the aircraft as a fixed platform, the framework enables **s
 ## Run Instructions:
 Basic set up:
 - go into Train_Run_config.py and change Wandb authentication key, artifacts folder and run_name
-- 
+  
 Different types of training can be run on this system:
 - 1 vs dummy: ensure you specify 1 or none starting checkpoints, alive_agents_start = 1 and dummy settings are not 'none'
 - 1 vs 1: just disable dummy settings by putting dummy_type = 'none'. You can choose to train both team's policy or just one: policies_to_train = ['team_0', 'team_1']
